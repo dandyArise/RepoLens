@@ -1,6 +1,7 @@
 mod cli;
 mod config;
 mod index;
+mod mcp;
 mod pathing;
 mod read;
 mod scanner;
@@ -50,6 +51,9 @@ fn main() -> Result<()> {
             hash,
         } => {
             read::read(&root, &path, lines.as_deref(), max_bytes, hash.as_deref())?;
+        }
+        Command::Mcp { root } => {
+            mcp::serve(&root)?;
         }
     }
 

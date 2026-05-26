@@ -355,18 +355,18 @@ Bench contre :
 
 ### Phase 8: MCP
 
-- [ ] Serveur JSON-RPC 2.0 stdio.
-- [ ] Tool `repolens_tree`.
-- [ ] Tool `repolens_search`.
-- [ ] Tool `repolens_read`.
-- [ ] Tool `repolens_word`.
-- [ ] Tool `repolens_status`.
+- [x] Serveur JSON-RPC 2.0 stdio.
+- [x] Tool `repolens_tree`.
+- [x] Tool `repolens_search`.
+- [x] Tool `repolens_read`.
+- [x] Tool `repolens_word`.
+- [x] Tool `repolens_status`.
 - [ ] Tool `repolens_snapshot`.
 - [ ] Tool `repolens_bundle`.
 - [ ] Tool `repolens_outline`.
 - [ ] Tool `repolens_symbol`.
 - [ ] Tool `repolens_deps`.
-- [ ] Tests MCP request/response.
+- [x] Tests MCP request/response.
 
 ### Phase 9: HTTP Local
 
@@ -424,8 +424,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Préparer symboles avec `tree-sitter`.
-2. Ajouter benchmarks simples contre `rg`.
-3. Préparer MCP stdio minimal.
+1. Ajouter `repolens_bundle`.
+2. Préparer symboles avec `tree-sitter`.
+3. Ajouter benchmarks simples contre `rg`.
 4. Ajouter commandes `outline` et `symbol`.
 5. Ajouter release GitHub multi-OS.

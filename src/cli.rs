@@ -50,4 +50,8 @@ pub enum Command {
         #[arg(long)]
         hash: Option<String>,
     },
+    Mcp {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
 }

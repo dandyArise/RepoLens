@@ -2,17 +2,32 @@ use std::collections::BTreeSet;
 use std::fs;
 
 use anyhow::Result;
+use serde::Serialize;
 
 use crate::index::{FileId, ProjectIndex};
 use crate::pathing::safe_join;
 
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchHit {
+    pub path: String,
+    pub line: usize,
+    pub text: String,
+}
+
 pub fn search(index: &ProjectIndex, query: &str, limit: usize) -> Result<()> {
+    for hit in search_hits(index, query, limit)? {
+        println!("{}:{}: {}", hit.path, hit.line, hit.text);
+    }
+    Ok(())
+}
+
+pub fn search_hits(index: &ProjectIndex, query: &str, limit: usize) -> Result<Vec<SearchHit>> {
     let candidates = candidate_files(index, query);
     let needle = query.to_lowercase();
-    let mut found = 0usize;
+    let mut hits = Vec::new();
 
     for id in candidates {
-        if found >= limit {
+        if hits.len() >= limit {
             break;
         }
         let Some(file) = index.file_by_id(id) else {
@@ -25,29 +40,38 @@ pub fn search(index: &ProjectIndex, query: &str, limit: usize) -> Result<()> {
 
         for (line_no, line) in content.lines().enumerate() {
             if line.to_lowercase().contains(&needle) {
-                println!("{}:{}: {}", file.path, line_no + 1, line.trim());
-                found += 1;
-                if found >= limit {
+                hits.push(SearchHit {
+                    path: file.path.to_string(),
+                    line: line_no + 1,
+                    text: line.trim().to_string(),
+                });
+                if hits.len() >= limit {
                     break;
                 }
             }
         }
     }
 
-    Ok(())
+    Ok(hits)
 }
 
 pub fn word(index: &ProjectIndex, word: &str, limit: usize) {
+    for path in word_paths(index, word, limit) {
+        println!("{path}");
+    }
+}
+
+pub fn word_paths(index: &ProjectIndex, word: &str, limit: usize) -> Vec<String> {
     let key = normalize_word(word);
     let Some(ids) = index.words.get(&key) else {
-        return;
+        return Vec::new();
     };
 
-    for id in ids.iter().take(limit) {
-        if let Some(file) = index.file_by_id(*id) {
-            println!("{}", file.path);
-        }
-    }
+    ids.iter()
+        .take(limit)
+        .filter_map(|id| index.file_by_id(*id))
+        .map(|file| file.path.to_string())
+        .collect()
 }
 
 pub fn extract_words(text: &str) -> BTreeSet<String> {

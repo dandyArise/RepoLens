@@ -1,5 +1,4 @@
 use std::fs;
-use std::io::{self, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
@@ -14,6 +13,18 @@ pub fn read(
     max_bytes: Option<usize>,
     expected_hash: Option<&str>,
 ) -> Result<()> {
+    let content = read_text(root, path, lines, max_bytes, expected_hash)?;
+    print!("{content}");
+    Ok(())
+}
+
+pub fn read_text(
+    root: &Path,
+    path: &Utf8Path,
+    lines: Option<&str>,
+    max_bytes: Option<usize>,
+    expected_hash: Option<&str>,
+) -> Result<String> {
     let root = canonical_utf8(root)?;
     let target = safe_join(&root, path)?;
     let bytes = fs::read(&target).with_context(|| format!("failed to read {target}"))?;
@@ -28,27 +39,26 @@ pub fn read(
         None => &bytes,
     };
     let content = String::from_utf8_lossy(bytes);
-    print_lines(&content, lines)
+    format_lines(&content, lines)
 }
 
-fn print_lines(content: &str, range: Option<&str>) -> Result<()> {
+fn format_lines(content: &str, range: Option<&str>) -> Result<String> {
     let (start, end) = match range {
         Some(raw) => parse_line_range(raw)?,
         None => (1, usize::MAX),
     };
 
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
+    let mut out = String::new();
     for (idx, line) in content.lines().enumerate() {
         let line_no = idx + 1;
         if line_no >= start && line_no <= end {
-            writeln!(out, "{line_no}: {line}")?;
+            out.push_str(&format!("{line_no}: {line}\n"));
         }
         if line_no > end {
             break;
         }
     }
-    Ok(())
+    Ok(out)
 }
 
 fn parse_line_range(raw: &str) -> Result<(usize, usize)> {
