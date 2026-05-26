@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 
+use crate::config::Config;
 use crate::pathing::canonical_utf8;
 use crate::scanner;
 use crate::search;
@@ -36,11 +37,12 @@ pub struct FileEntry {
 impl ProjectIndex {
     pub fn build(root: &Path) -> Result<Self> {
         let root = canonical_utf8(root)?;
+        let config = Config::load(root.as_std_path())?;
         let mut files = Vec::new();
         let mut words: BTreeMap<String, BTreeSet<FileId>> = BTreeMap::new();
         let mut trigrams: BTreeMap<String, BTreeSet<FileId>> = BTreeMap::new();
 
-        for path in scanner::source_files(root.as_std_path())? {
+        for path in scanner::source_files(root.as_std_path(), &config)? {
             let bytes =
                 fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
             if scanner::looks_binary(&bytes) {

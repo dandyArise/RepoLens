@@ -1,4 +1,5 @@
 mod cli;
+mod config;
 mod index;
 mod pathing;
 mod read;

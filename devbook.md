@@ -295,15 +295,15 @@ Bench contre :
 - [x] Bloquer credentials/secrets.
 - [x] Bloquer path traversal.
 - [x] Refuser paths absolus dans commandes ciblant le repo.
-- [ ] Ajouter `.repolensrc.toml`.
-- [ ] Ajouter `allow_sensitive = false`.
+- [x] Ajouter `.repolensrc.toml`.
+- [x] Ajouter `allow_sensitive = false`.
 - [ ] Tests sécurité Windows/Linux.
 
 ### Phase 4: Tests
 
 - [x] Tests path normalization.
-- [ ] Tests scan `.gitignore`.
-- [ ] Tests binary detection.
+- [x] Tests scan `.gitignore`.
+- [x] Tests binary detection.
 - [x] Tests line range.
 - [x] Tests search.
 - [x] Tests snapshot load/save.
@@ -424,8 +424,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter tests scan `.gitignore` et binary detection.
-2. Ajouter `.repolensrc.toml`.
-3. Préparer symboles avec `tree-sitter`.
-4. Ajouter benchmarks simples contre `rg`.
-5. Préparer MCP stdio minimal.
+1. Préparer symboles avec `tree-sitter`.
+2. Ajouter benchmarks simples contre `rg`.
+3. Préparer MCP stdio minimal.
+4. Ajouter commandes `outline` et `symbol`.
+5. Ajouter release GitHub multi-OS.

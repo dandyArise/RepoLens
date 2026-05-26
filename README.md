@@ -9,6 +9,8 @@ cargo run -- index .
 cargo run -- tree .
 cargo run -- search "fn main" .
 cargo run -- read src/main.rs . --lines 1-40
+cargo run -- status .
+cargo run -- word main .
 ```
 
 ## Direction
