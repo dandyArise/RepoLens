@@ -178,7 +178,8 @@ fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value>
             "files": index.files.len(),
             "words": index.words.len(),
             "trigrams": index.trigrams.len(),
-            "symbols": index.symbols.len()
+            "symbols": index.symbols.len(),
+            "symbol_names": index.symbols_by_name.len()
         }),
         "repolens_tree" => {
             let limit = get_usize(&args, "limit").unwrap_or(200);

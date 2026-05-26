@@ -338,7 +338,7 @@ Bench contre :
 - [x] Parser TSX.
 - [x] Commande `outline`.
 - [x] Commande `symbol`.
-- [ ] Index `symbols_by_name`.
+- [x] Index `symbols_by_name`.
 - [x] Tests symboles.
 
 ### Phase 7: Dépendances
@@ -424,8 +424,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter index `symbols_by_name`.
-2. Ajouter benchmarks simples contre `rg`.
-3. Ajouter dépendances/imports Rust/TS/Python.
-4. Ajouter release GitHub multi-OS.
-5. Ajouter install PowerShell.
+1. Ajouter benchmarks simples contre `rg`.
+2. Ajouter dépendances/imports Rust/TS/Python.
+3. Ajouter release GitHub multi-OS.
+4. Ajouter install PowerShell.
+5. Ajouter watcher incrémental.

@@ -14,6 +14,7 @@ use crate::search;
 use crate::symbols::{self, Symbol};
 
 pub type FileId = u32;
+pub type SymbolId = u32;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectIndex {
@@ -24,6 +25,8 @@ pub struct ProjectIndex {
     pub trigrams: BTreeMap<String, Vec<FileId>>,
     #[serde(default)]
     pub symbols: Vec<Symbol>,
+    #[serde(default)]
+    pub symbols_by_name: BTreeMap<String, Vec<SymbolId>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -100,19 +103,32 @@ impl ProjectIndex {
         }
 
         files.sort_by(|a, b| a.path.cmp(&b.path));
+        let symbols_by_name = index_symbols_by_name(&symbol_list);
         Ok(Self {
-            version: 3,
+            version: 4,
             root,
             files,
             words: flatten(words),
             trigrams: flatten(trigrams),
             symbols: symbol_list,
+            symbols_by_name,
         })
     }
 
     pub fn file_by_id(&self, id: FileId) -> Option<&FileEntry> {
         self.files.iter().find(|file| file.id == id)
     }
+}
+
+fn index_symbols_by_name(symbols: &[Symbol]) -> BTreeMap<String, Vec<SymbolId>> {
+    let mut index: BTreeMap<String, Vec<SymbolId>> = BTreeMap::new();
+    for (id, symbol) in symbols.iter().enumerate() {
+        index
+            .entry(symbol.name.to_ascii_lowercase())
+            .or_default()
+            .push(id as SymbolId);
+    }
+    index
 }
 
 fn flatten(index: BTreeMap<String, BTreeSet<FileId>>) -> BTreeMap<String, Vec<FileId>> {
@@ -143,11 +159,31 @@ fn line_offsets(text: &str) -> Vec<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::line_offsets;
+    use camino::Utf8PathBuf;
+
+    use crate::symbols::{Symbol, SymbolKind};
+
+    use super::{index_symbols_by_name, line_offsets};
 
     #[test]
     fn records_line_offsets() {
         assert_eq!(line_offsets("a\nbc\n"), vec![0, 2]);
         assert_eq!(line_offsets("abc"), vec![0]);
+    }
+
+    #[test]
+    fn indexes_symbols_by_normalized_name() {
+        let symbols = vec![Symbol {
+            name: "ProjectIndex".to_string(),
+            kind: SymbolKind::Struct,
+            file_id: 0,
+            path: Utf8PathBuf::from("src/index.rs"),
+            line: 1,
+            column: 1,
+            end_line: 1,
+        }];
+
+        let index = index_symbols_by_name(&symbols);
+        assert_eq!(index.get("projectindex").unwrap(), &vec![0]);
     }
 }

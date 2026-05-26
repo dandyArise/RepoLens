@@ -163,6 +163,7 @@ mod tests {
             words: BTreeMap::new(),
             trigrams,
             symbols: Vec::new(),
+            symbols_by_name: BTreeMap::new(),
         };
 
         assert_eq!(super::candidate_files(&index, "abcd"), vec![1]);

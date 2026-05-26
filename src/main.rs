@@ -36,6 +36,7 @@ fn main() -> Result<()> {
             println!("words: {}", index.words.len());
             println!("trigrams: {}", index.trigrams.len());
             println!("symbols: {}", index.symbols.len());
+            println!("symbol names: {}", index.symbols_by_name.len());
         }
         Command::Search { query, root, limit } => {
             let index = snapshot::load_or_build(&root)?;

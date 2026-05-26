@@ -145,13 +145,7 @@ pub fn print_outline(index: &ProjectIndex, path: &Utf8PathBuf) {
 }
 
 pub fn print_symbols(index: &ProjectIndex, name: &str, limit: usize) {
-    let needle = name.to_ascii_lowercase();
-    for symbol in index
-        .symbols
-        .iter()
-        .filter(|symbol| symbol.name.to_ascii_lowercase().contains(&needle))
-        .take(limit)
-    {
+    for symbol in find(index, name, limit) {
         println!(
             "{}:{}:{} {:?} {}",
             symbol.path, symbol.line, symbol.column, symbol.kind, symbol.name
@@ -170,6 +164,15 @@ pub fn outline(index: &ProjectIndex, path: &Utf8PathBuf) -> Vec<Symbol> {
 
 pub fn find(index: &ProjectIndex, name: &str, limit: usize) -> Vec<Symbol> {
     let needle = name.to_ascii_lowercase();
+    if let Some(ids) = index.symbols_by_name.get(&needle) {
+        return ids
+            .iter()
+            .take(limit)
+            .filter_map(|id| index.symbols.get(*id as usize))
+            .cloned()
+            .collect();
+    }
+
     index
         .symbols
         .iter()
