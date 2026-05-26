@@ -41,8 +41,14 @@ fn main() -> Result<()> {
             let index = snapshot::load_or_build(&root)?;
             search::word(&index, &word, limit);
         }
-        Command::Read { path, root, lines } => {
-            read::read(&root, &path, lines.as_deref())?;
+        Command::Read {
+            path,
+            root,
+            lines,
+            max_bytes,
+            hash,
+        } => {
+            read::read(&root, &path, lines.as_deref(), max_bytes, hash.as_deref())?;
         }
     }
 

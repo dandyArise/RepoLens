@@ -45,5 +45,9 @@ pub enum Command {
         root: PathBuf,
         #[arg(long)]
         lines: Option<String>,
+        #[arg(long)]
+        max_bytes: Option<usize>,
+        #[arg(long)]
+        hash: Option<String>,
     },
 }

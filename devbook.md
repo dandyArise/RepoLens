@@ -268,8 +268,8 @@ Bench contre :
 - [x] Refactor `search.rs`.
 - [x] Refactor `read.rs`.
 - [x] Ajouter `status`.
-- [ ] Ajouter limite `max_bytes` à `read`.
-- [ ] Ajouter vérification hash optionnelle à `read`.
+- [x] Ajouter limite `max_bytes` à `read`.
+- [x] Ajouter vérification hash optionnelle à `read`.
 
 ### Phase 2: Index Rapide
 
@@ -277,7 +277,7 @@ Bench contre :
 - [x] Stocker `mtime_ms`.
 - [x] Stocker `size`.
 - [x] Stocker `hash`.
-- [ ] Ajouter line offsets.
+- [x] Ajouter line offsets.
 - [x] Ajouter tokenizer mots.
 - [x] Ajouter word index.
 - [x] Ajouter trigram extraction.
@@ -305,8 +305,8 @@ Bench contre :
 - [ ] Tests scan `.gitignore`.
 - [ ] Tests binary detection.
 - [x] Tests line range.
-- [ ] Tests search.
-- [ ] Tests snapshot load/save.
+- [x] Tests search.
+- [x] Tests snapshot load/save.
 - [ ] Fixtures Rust.
 - [ ] Fixtures TypeScript.
 - [ ] Fixtures Windows paths.
@@ -424,8 +424,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter `max_bytes` et vérification hash à `read`.
-2. Ajouter line offsets.
-3. Ajouter tests scan/snapshot/search.
-4. Ajouter `.repolensrc.toml`.
-5. Préparer symboles avec `tree-sitter`.
+1. Ajouter tests scan `.gitignore` et binary detection.
+2. Ajouter `.repolensrc.toml`.
+3. Préparer symboles avec `tree-sitter`.
+4. Ajouter benchmarks simples contre `rg`.
+5. Préparer MCP stdio minimal.

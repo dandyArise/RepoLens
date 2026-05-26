@@ -7,11 +7,27 @@ use camino::Utf8Path;
 
 use crate::pathing::{canonical_utf8, safe_join};
 
-pub fn read(root: &Path, path: &Utf8Path, lines: Option<&str>) -> Result<()> {
+pub fn read(
+    root: &Path,
+    path: &Utf8Path,
+    lines: Option<&str>,
+    max_bytes: Option<usize>,
+    expected_hash: Option<&str>,
+) -> Result<()> {
     let root = canonical_utf8(root)?;
     let target = safe_join(&root, path)?;
-    let content =
-        fs::read_to_string(&target).with_context(|| format!("failed to read {target}"))?;
+    let bytes = fs::read(&target).with_context(|| format!("failed to read {target}"))?;
+    if let Some(expected_hash) = expected_hash {
+        let actual = blake3::hash(&bytes).to_hex().to_string();
+        if actual != expected_hash {
+            bail!("hash mismatch");
+        }
+    }
+    let bytes = match max_bytes {
+        Some(max_bytes) => &bytes[..bytes.len().min(max_bytes)],
+        None => &bytes,
+    };
+    let content = String::from_utf8_lossy(bytes);
     print_lines(&content, lines)
 }
 

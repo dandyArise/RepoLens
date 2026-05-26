@@ -74,7 +74,7 @@ pub fn extract_trigrams(text: &str) -> BTreeSet<String> {
         .collect()
 }
 
-fn candidate_files(index: &ProjectIndex, query: &str) -> Vec<FileId> {
+pub(crate) fn candidate_files(index: &ProjectIndex, query: &str) -> Vec<FileId> {
     let trigrams: Vec<_> = extract_trigrams(query).into_iter().collect();
     if trigrams.is_empty() {
         return index.files.iter().map(|file| file.id).collect();
@@ -105,6 +105,12 @@ fn normalize_word(word: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use camino::Utf8PathBuf;
+
+    use crate::index::{FileEntry, ProjectIndex};
+
     use super::{extract_trigrams, extract_words};
 
     #[test]
@@ -119,5 +125,33 @@ mod tests {
         let trigrams = extract_trigrams("abcd");
         assert!(trigrams.contains("abc"));
         assert!(trigrams.contains("bcd"));
+    }
+
+    #[test]
+    fn intersects_trigram_candidates() {
+        let mut trigrams = BTreeMap::new();
+        trigrams.insert("abc".to_string(), vec![0, 1]);
+        trigrams.insert("bcd".to_string(), vec![1]);
+        let index = ProjectIndex {
+            version: 2,
+            root: Utf8PathBuf::from("."),
+            files: vec![file(0, "a.txt"), file(1, "b.txt")],
+            words: BTreeMap::new(),
+            trigrams,
+        };
+
+        assert_eq!(super::candidate_files(&index, "abcd"), vec![1]);
+    }
+
+    fn file(id: u32, path: &str) -> FileEntry {
+        FileEntry {
+            id,
+            path: Utf8PathBuf::from(path),
+            bytes: 0,
+            lines: 0,
+            line_offsets: vec![0],
+            mtime_ms: 0,
+            hash: String::new(),
+        }
     }
 }

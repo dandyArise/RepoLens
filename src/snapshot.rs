@@ -28,3 +28,25 @@ pub fn save(index: &ProjectIndex) -> Result<()> {
 pub fn index_path(root: &Utf8Path) -> Utf8PathBuf {
     root.join(".repolens").join("index.json")
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use crate::index::ProjectIndex;
+
+    use super::{load_or_build, save};
+
+    #[test]
+    fn saves_and_loads_snapshot() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
+
+        let index = ProjectIndex::build(temp.path()).unwrap();
+        save(&index).unwrap();
+
+        let loaded = load_or_build(temp.path()).unwrap();
+        assert_eq!(loaded.files.len(), 1);
+        assert_eq!(loaded.files[0].path.as_str(), "main.rs");
+    }
+}

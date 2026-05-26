@@ -28,6 +28,7 @@ pub struct FileEntry {
     pub path: Utf8PathBuf,
     pub bytes: u64,
     pub lines: u32,
+    pub line_offsets: Vec<u64>,
     pub mtime_ms: u64,
     pub hash: String,
 }
@@ -69,6 +70,7 @@ impl ProjectIndex {
                 path: rel,
                 bytes: bytes.len() as u64,
                 lines: text.lines().count() as u32,
+                line_offsets: line_offsets(&text),
                 mtime_ms: mtime_ms(&metadata),
                 hash: blake3::hash(&bytes).to_hex().to_string(),
             });
@@ -103,4 +105,25 @@ fn mtime_ms(metadata: &fs::Metadata) -> u64 {
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_millis() as u64)
         .unwrap_or(0)
+}
+
+fn line_offsets(text: &str) -> Vec<u64> {
+    let mut offsets = vec![0];
+    for (idx, byte) in text.bytes().enumerate() {
+        if byte == b'\n' && idx + 1 < text.len() {
+            offsets.push((idx + 1) as u64);
+        }
+    }
+    offsets
+}
+
+#[cfg(test)]
+mod tests {
+    use super::line_offsets;
+
+    #[test]
+    fn records_line_offsets() {
+        assert_eq!(line_offsets("a\nbc\n"), vec![0, 2]);
+        assert_eq!(line_offsets("abc"), vec![0]);
+    }
 }
