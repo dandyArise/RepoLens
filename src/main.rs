@@ -1,3 +1,4 @@
+mod bench;
 mod cli;
 mod config;
 mod deps;
@@ -71,6 +72,14 @@ fn main() -> Result<()> {
         Command::Deps { path, root } => {
             let index = snapshot::load_or_build(&root)?;
             deps::print_deps(&index, &path);
+        }
+        Command::Bench {
+            root,
+            query,
+            symbol,
+            limit,
+        } => {
+            bench::run(&root, &query, &symbol, limit)?;
         }
     }
 

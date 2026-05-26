@@ -239,6 +239,11 @@ Bench contre :
 - `grep`
 - `ast-grep`
 
+État actuel :
+
+- [x] Commande `bench` pour `index/search/symbol`.
+- [x] Comparaison `rg` optionnelle si disponible.
+
 ## Checklist
 
 ### Phase 0: Fondation
@@ -425,7 +430,7 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 Ordre recommandé :
 
 1. Ajouter résolution TS/JS relative.
-2. Ajouter benchmarks simples contre `rg`.
-3. Ajouter release GitHub multi-OS.
-4. Ajouter install PowerShell.
-5. Ajouter watcher incrémental.
+2. Ajouter release GitHub multi-OS.
+3. Ajouter install PowerShell.
+4. Ajouter watcher incrémental.
+5. Ajouter édition atomique.

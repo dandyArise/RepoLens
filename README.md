@@ -14,6 +14,7 @@ cargo run -- word main .
 cargo run -- outline src/main.rs .
 cargo run -- symbol ProjectIndex .
 cargo run -- deps src/main.rs .
+cargo run -- bench . --query ProjectIndex --symbol ProjectIndex
 ```
 
 ## Direction

@@ -71,4 +71,14 @@ pub enum Command {
         #[arg(default_value = ".")]
         root: PathBuf,
     },
+    Bench {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+        #[arg(long, default_value = "ProjectIndex")]
+        query: String,
+        #[arg(long, default_value = "ProjectIndex")]
+        symbol: String,
+        #[arg(short, long, default_value_t = 20)]
+        limit: usize,
+    },
 }
