@@ -88,6 +88,31 @@ pub fn extract_typescript_symbols(
     extract_ts_like_symbols(file_id, path, text, parser)
 }
 
+pub fn extract_python_symbols(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    text: &str,
+) -> Result<Vec<Symbol>> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_python::LANGUAGE.into())
+        .context("failed to load Python tree-sitter grammar")?;
+    let tree = parser
+        .parse(text, None)
+        .ok_or_else(|| anyhow::anyhow!("failed to parse Python file"))?;
+
+    let mut symbols = Vec::new();
+    walk_python(
+        tree.root_node(),
+        text.as_bytes(),
+        file_id,
+        path,
+        false,
+        &mut symbols,
+    );
+    Ok(symbols)
+}
+
 fn extract_ts_like_symbols(
     file_id: FileId,
     path: &Utf8PathBuf,
@@ -189,6 +214,25 @@ fn walk_ts_like(
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         walk_ts_like(child, source, file_id, path, next_in_class, symbols);
+    }
+}
+
+fn walk_python(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    in_class: bool,
+    symbols: &mut Vec<Symbol>,
+) {
+    if let Some(symbol) = python_symbol_from_node(node, source, file_id, path, in_class) {
+        symbols.push(symbol);
+    }
+
+    let next_in_class = in_class || node.kind() == "class_definition";
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_python(child, source, file_id, path, next_in_class, symbols);
     }
 }
 
@@ -322,6 +366,55 @@ fn variable_symbol(node: Node, source: &[u8], in_class: bool) -> Option<(SymbolK
     None
 }
 
+fn python_symbol_from_node(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    in_class: bool,
+) -> Option<Symbol> {
+    let (kind, name) = match node.kind() {
+        "function_definition" => (
+            if in_class {
+                SymbolKind::Method
+            } else {
+                SymbolKind::Function
+            },
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        "class_definition" => (
+            SymbolKind::Class,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        "assignment" if !in_class => (
+            SymbolKind::Variable,
+            node.child_by_field_name("left")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        _ => return None,
+    };
+
+    let start = node.start_position();
+    let end = node.end_position();
+    Some(Symbol {
+        name,
+        kind,
+        file_id,
+        path: path.clone(),
+        line: start.row + 1,
+        column: start.column + 1,
+        end_line: end.row + 1,
+    })
+}
+
 fn impl_name(node: Node, source: &[u8]) -> Option<String> {
     let mut cursor = node.walk();
     let mut parts = Vec::new();
@@ -344,7 +437,9 @@ fn impl_name(node: Node, source: &[u8]) -> Option<String> {
 mod tests {
     use camino::Utf8PathBuf;
 
-    use super::{SymbolKind, extract_rust_symbols, extract_typescript_symbols};
+    use super::{
+        SymbolKind, extract_python_symbols, extract_rust_symbols, extract_typescript_symbols,
+    };
 
     #[test]
     fn extracts_rust_symbols() {
@@ -424,6 +519,42 @@ let value = 1;
             symbols
                 .iter()
                 .any(|s| s.name == "helper" && s.kind == SymbolKind::Function)
+        );
+    }
+
+    #[test]
+    fn extracts_python_symbols() {
+        let text = r#"
+VALUE = 1
+
+class Service:
+    def run(self):
+        pass
+
+def make_user():
+    return Service()
+"#;
+        let symbols = extract_python_symbols(0, &Utf8PathBuf::from("main.py"), text).unwrap();
+
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "VALUE" && s.kind == SymbolKind::Variable)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Service" && s.kind == SymbolKind::Class)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "run" && s.kind == SymbolKind::Method)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "make_user" && s.kind == SymbolKind::Function)
         );
     }
 }

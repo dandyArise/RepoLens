@@ -80,6 +80,9 @@ impl ProjectIndex {
                 Some("tsx") | Some("jsx") => {
                     symbol_list.extend(symbols::extract_typescript_symbols(id, &rel, &text, true)?);
                 }
+                Some("py") | Some("pyw") => {
+                    symbol_list.extend(symbols::extract_python_symbols(id, &rel, &text)?);
+                }
                 _ => {}
             }
 

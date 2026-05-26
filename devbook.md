@@ -39,7 +39,7 @@ Crates de base :
 - `rayon` : indexation parallèle.
 - `roaring` : bitmaps rapides.
 - `memmap2` : mmap snapshot/index.
-- `tree-sitter` : symboles. Rust, TypeScript, JavaScript et TSX sont branchés en premier.
+- `tree-sitter` : symboles. Rust, TypeScript, JavaScript, TSX et Python sont branchés en premier.
 - `notify` : watcher.
 - `tokio`, `axum` : HTTP local.
 - `ropey` : édition texte.
@@ -332,7 +332,7 @@ Bench contre :
 - [x] Parser Rust.
 - [x] Parser TypeScript.
 - [x] Parser JavaScript.
-- [ ] Parser Python.
+- [x] Parser Python.
 - [ ] Parser Go.
 - [ ] Parser PHP.
 - [x] Parser TSX.
@@ -424,8 +424,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter parser Python.
-2. Ajouter index `symbols_by_name`.
-3. Ajouter benchmarks simples contre `rg`.
+1. Ajouter index `symbols_by_name`.
+2. Ajouter benchmarks simples contre `rg`.
+3. Ajouter dépendances/imports Rust/TS/Python.
 4. Ajouter release GitHub multi-OS.
 5. Ajouter install PowerShell.
