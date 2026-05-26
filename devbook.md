@@ -362,7 +362,7 @@ Bench contre :
 - [x] Tool `repolens_word`.
 - [x] Tool `repolens_status`.
 - [ ] Tool `repolens_snapshot`.
-- [ ] Tool `repolens_bundle`.
+- [x] Tool `repolens_bundle`.
 - [ ] Tool `repolens_outline`.
 - [ ] Tool `repolens_symbol`.
 - [ ] Tool `repolens_deps`.
@@ -424,8 +424,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter `repolens_bundle`.
-2. Préparer symboles avec `tree-sitter`.
-3. Ajouter benchmarks simples contre `rg`.
-4. Ajouter commandes `outline` et `symbol`.
-5. Ajouter release GitHub multi-OS.
+1. Préparer symboles avec `tree-sitter`.
+2. Ajouter benchmarks simples contre `rg`.
+3. Ajouter commandes `outline` et `symbol`.
+4. Ajouter release GitHub multi-OS.
+5. Ajouter install PowerShell.

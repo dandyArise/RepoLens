@@ -128,6 +128,11 @@ fn tools() -> Vec<Value> {
             "Read a file with optional line range.",
             json!({"type": "object", "required": ["path"], "properties": {"path": {"type": "string"}, "lines": {"type": "string"}, "max_bytes": {"type": "integer"}, "hash": {"type": "string"}}}),
         ),
+        tool(
+            "repolens_bundle",
+            "Run multiple read-only RepoLens tools in one call.",
+            json!({"type": "object", "required": ["ops"], "properties": {"ops": {"type": "array", "items": {"type": "object", "required": ["tool"], "properties": {"tool": {"type": "string"}, "arguments": {"type": "object"}}}}}}),
+        ),
     ]
 }
 
@@ -146,7 +151,18 @@ fn call_tool(index: &ProjectIndex, params: Value) -> Result<Value> {
         .ok_or_else(|| anyhow!("missing tool name"))?;
     let args = params.get("arguments").cloned().unwrap_or(Value::Null);
 
-    let content = match name {
+    let content = call_tool_raw(index, name, args)?;
+
+    Ok(json!({
+        "content": [{
+            "type": "text",
+            "text": serde_json::to_string_pretty(&content)?
+        }]
+    }))
+}
+
+fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value> {
+    let value = match name {
         "repolens_status" => json!({
             "root": index.root,
             "files": index.files.len(),
@@ -182,15 +198,28 @@ fn call_tool(index: &ProjectIndex, params: Value) -> Result<Value> {
                 hash
             )?)
         }
+        "repolens_bundle" => {
+            let ops = args
+                .get("ops")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("missing 'ops'"))?;
+            let mut results = Vec::new();
+            for op in ops.iter().take(10) {
+                let tool = get_str(op, "tool")?;
+                if tool == "repolens_bundle" {
+                    return Err(anyhow!("nested bundle is not allowed"));
+                }
+                let arguments = op.get("arguments").cloned().unwrap_or(Value::Null);
+                results.push(json!({
+                    "tool": tool,
+                    "result": call_tool_raw(index, tool, arguments)?
+                }));
+            }
+            json!(results)
+        }
         other => return Err(anyhow!("unknown tool: {other}")),
     };
-
-    Ok(json!({
-        "content": [{
-            "type": "text",
-            "text": serde_json::to_string_pretty(&content)?
-        }]
-    }))
+    Ok(value)
 }
 
 fn get_str<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
@@ -224,5 +253,25 @@ mod tests {
 
         assert!(response.error.is_none());
         assert!(response.result.unwrap()["tools"].is_array());
+    }
+
+    #[test]
+    fn handles_bundle() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
+        let index = ProjectIndex::build(temp.path()).unwrap();
+
+        let response = handle_line(
+            &index,
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"repolens_bundle","arguments":{"ops":[{"tool":"repolens_status","arguments":{}},{"tool":"repolens_search","arguments":{"query":"main","limit":1}}]}}}"#,
+        );
+
+        assert!(response.error.is_none());
+        let text = response.result.unwrap()["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(text.contains("repolens_status"));
+        assert!(text.contains("repolens_search"));
     }
 }
