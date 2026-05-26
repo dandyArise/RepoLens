@@ -66,4 +66,9 @@ pub enum Command {
         #[arg(short, long, default_value_t = 20)]
         limit: usize,
     },
+    Deps {
+        path: Utf8PathBuf,
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
 }

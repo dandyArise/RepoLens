@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod deps;
 mod index;
 mod mcp;
 mod pathing;
@@ -37,6 +38,7 @@ fn main() -> Result<()> {
             println!("trigrams: {}", index.trigrams.len());
             println!("symbols: {}", index.symbols.len());
             println!("symbol names: {}", index.symbols_by_name.len());
+            println!("deps files: {}", index.deps.len());
         }
         Command::Search { query, root, limit } => {
             let index = snapshot::load_or_build(&root)?;
@@ -65,6 +67,10 @@ fn main() -> Result<()> {
         Command::Symbol { name, root, limit } => {
             let index = snapshot::load_or_build(&root)?;
             symbols::print_symbols(&index, &name, limit);
+        }
+        Command::Deps { path, root } => {
+            let index = snapshot::load_or_build(&root)?;
+            deps::print_deps(&index, &path);
         }
     }
 

@@ -343,15 +343,15 @@ Bench contre :
 
 ### Phase 7: Dépendances
 
-- [ ] Modèle `ImportRef`.
+- [x] Modèle `ImportRef`.
 - [ ] Résolution TS/JS relative.
-- [ ] Résolution Rust basique.
-- [ ] Résolution Python best-effort.
+- [x] Résolution Rust basique.
+- [x] Résolution Python best-effort.
 - [ ] Résolution Go best-effort.
 - [ ] `deps_forward`.
 - [ ] `deps_reverse`.
-- [ ] Commande `deps`.
-- [ ] Tests deps.
+- [x] Commande `deps`.
+- [x] Tests deps.
 
 ### Phase 8: MCP
 
@@ -365,7 +365,7 @@ Bench contre :
 - [x] Tool `repolens_bundle`.
 - [x] Tool `repolens_outline`.
 - [x] Tool `repolens_symbol`.
-- [ ] Tool `repolens_deps`.
+- [x] Tool `repolens_deps`.
 - [x] Tests MCP request/response.
 
 ### Phase 9: HTTP Local
@@ -424,8 +424,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter benchmarks simples contre `rg`.
-2. Ajouter dépendances/imports Rust/TS/Python.
+1. Ajouter résolution TS/JS relative.
+2. Ajouter benchmarks simples contre `rg`.
 3. Ajouter release GitHub multi-OS.
 4. Ajouter install PowerShell.
 5. Ajouter watcher incrémental.

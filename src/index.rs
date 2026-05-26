@@ -8,6 +8,7 @@ use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
+use crate::deps::{self, FileDeps};
 use crate::pathing::canonical_utf8;
 use crate::scanner;
 use crate::search;
@@ -27,6 +28,8 @@ pub struct ProjectIndex {
     pub symbols: Vec<Symbol>,
     #[serde(default)]
     pub symbols_by_name: BTreeMap<String, Vec<SymbolId>>,
+    #[serde(default)]
+    pub deps: Vec<FileDeps>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -48,6 +51,7 @@ impl ProjectIndex {
         let mut words: BTreeMap<String, BTreeSet<FileId>> = BTreeMap::new();
         let mut trigrams: BTreeMap<String, BTreeSet<FileId>> = BTreeMap::new();
         let mut symbol_list = Vec::new();
+        let mut deps_list = Vec::new();
 
         for path in scanner::source_files(root.as_std_path(), &config)? {
             let bytes =
@@ -72,19 +76,26 @@ impl ProjectIndex {
                 trigrams.entry(trigram).or_default().insert(id);
             }
             match rel.extension() {
-                Some("rs") => symbol_list.extend(symbols::extract_rust_symbols(id, &rel, &text)?),
+                Some("rs") => {
+                    symbol_list.extend(symbols::extract_rust_symbols(id, &rel, &text)?);
+                    deps_list.push(deps::extract_rust_deps(id, &rel, &text)?);
+                }
                 Some("js") | Some("mjs") | Some("cjs") => {
                     symbol_list.extend(symbols::extract_javascript_symbols(id, &rel, &text)?);
+                    deps_list.push(deps::extract_ts_like_deps(id, &rel, &text)?);
                 }
                 Some("ts") | Some("mts") | Some("cts") => {
                     symbol_list
                         .extend(symbols::extract_typescript_symbols(id, &rel, &text, false)?);
+                    deps_list.push(deps::extract_ts_like_deps(id, &rel, &text)?);
                 }
                 Some("tsx") | Some("jsx") => {
                     symbol_list.extend(symbols::extract_typescript_symbols(id, &rel, &text, true)?);
+                    deps_list.push(deps::extract_ts_like_deps(id, &rel, &text)?);
                 }
                 Some("py") | Some("pyw") => {
                     symbol_list.extend(symbols::extract_python_symbols(id, &rel, &text)?);
+                    deps_list.push(deps::extract_python_deps(id, &rel, &text)?);
                 }
                 _ => {}
             }
@@ -105,13 +116,14 @@ impl ProjectIndex {
         files.sort_by(|a, b| a.path.cmp(&b.path));
         let symbols_by_name = index_symbols_by_name(&symbol_list);
         Ok(Self {
-            version: 4,
+            version: 5,
             root,
             files,
             words: flatten(words),
             trigrams: flatten(trigrams),
             symbols: symbol_list,
             symbols_by_name,
+            deps: deps_list,
         })
     }
 

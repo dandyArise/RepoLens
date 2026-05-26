@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::index::ProjectIndex;
-use crate::{read, search, snapshot, symbols};
+use crate::{deps, read, search, snapshot, symbols};
 
 #[derive(Debug, Deserialize)]
 struct Request {
@@ -143,6 +143,11 @@ fn tools() -> Vec<Value> {
             "Find indexed symbols by name.",
             json!({"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "limit": {"type": "integer"}}}),
         ),
+        tool(
+            "repolens_deps",
+            "Return imports for one indexed file.",
+            json!({"type": "object", "required": ["path"], "properties": {"path": {"type": "string"}}}),
+        ),
     ]
 }
 
@@ -179,7 +184,8 @@ fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value>
             "words": index.words.len(),
             "trigrams": index.trigrams.len(),
             "symbols": index.symbols.len(),
-            "symbol_names": index.symbols_by_name.len()
+            "symbol_names": index.symbols_by_name.len(),
+            "deps_files": index.deps.len()
         }),
         "repolens_tree" => {
             let limit = get_usize(&args, "limit").unwrap_or(200);
@@ -218,6 +224,10 @@ fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value>
             let name = get_str(&args, "name")?;
             let limit = get_usize(&args, "limit").unwrap_or(20);
             json!(symbols::find(index, name, limit))
+        }
+        "repolens_deps" => {
+            let path = Utf8PathBuf::from(get_str(&args, "path")?);
+            json!(deps::deps_for_file(index, &path))
         }
         "repolens_bundle" => {
             let ops = args
