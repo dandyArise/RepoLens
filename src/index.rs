@@ -68,8 +68,19 @@ impl ProjectIndex {
             for trigram in search::extract_trigrams(&text) {
                 trigrams.entry(trigram).or_default().insert(id);
             }
-            if rel.extension() == Some("rs") {
-                symbol_list.extend(symbols::extract_rust_symbols(id, &rel, &text)?);
+            match rel.extension() {
+                Some("rs") => symbol_list.extend(symbols::extract_rust_symbols(id, &rel, &text)?),
+                Some("js") | Some("mjs") | Some("cjs") => {
+                    symbol_list.extend(symbols::extract_javascript_symbols(id, &rel, &text)?);
+                }
+                Some("ts") | Some("mts") | Some("cts") => {
+                    symbol_list
+                        .extend(symbols::extract_typescript_symbols(id, &rel, &text, false)?);
+                }
+                Some("tsx") | Some("jsx") => {
+                    symbol_list.extend(symbols::extract_typescript_symbols(id, &rel, &text, true)?);
+                }
+                _ => {}
             }
 
             let metadata = fs::metadata(&path)
