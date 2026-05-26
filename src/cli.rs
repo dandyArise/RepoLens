@@ -54,4 +54,16 @@ pub enum Command {
         #[arg(default_value = ".")]
         root: PathBuf,
     },
+    Outline {
+        path: Utf8PathBuf,
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
+    Symbol {
+        name: String,
+        #[arg(default_value = ".")]
+        root: PathBuf,
+        #[arg(short, long, default_value_t = 20)]
+        limit: usize,
+    },
 }

@@ -162,6 +162,7 @@ mod tests {
             files: vec![file(0, "a.txt"), file(1, "b.txt")],
             words: BTreeMap::new(),
             trigrams,
+            symbols: Vec::new(),
         };
 
         assert_eq!(super::candidate_files(&index, "abcd"), vec![1]);

@@ -11,6 +11,7 @@ use crate::config::Config;
 use crate::pathing::canonical_utf8;
 use crate::scanner;
 use crate::search;
+use crate::symbols::{self, Symbol};
 
 pub type FileId = u32;
 
@@ -21,6 +22,8 @@ pub struct ProjectIndex {
     pub files: Vec<FileEntry>,
     pub words: BTreeMap<String, Vec<FileId>>,
     pub trigrams: BTreeMap<String, Vec<FileId>>,
+    #[serde(default)]
+    pub symbols: Vec<Symbol>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -41,6 +44,7 @@ impl ProjectIndex {
         let mut files = Vec::new();
         let mut words: BTreeMap<String, BTreeSet<FileId>> = BTreeMap::new();
         let mut trigrams: BTreeMap<String, BTreeSet<FileId>> = BTreeMap::new();
+        let mut symbol_list = Vec::new();
 
         for path in scanner::source_files(root.as_std_path(), &config)? {
             let bytes =
@@ -64,6 +68,9 @@ impl ProjectIndex {
             for trigram in search::extract_trigrams(&text) {
                 trigrams.entry(trigram).or_default().insert(id);
             }
+            if rel.extension() == Some("rs") {
+                symbol_list.extend(symbols::extract_rust_symbols(id, &rel, &text)?);
+            }
 
             let metadata = fs::metadata(&path)
                 .with_context(|| format!("failed to stat {}", path.display()))?;
@@ -80,11 +87,12 @@ impl ProjectIndex {
 
         files.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(Self {
-            version: 2,
+            version: 3,
             root,
             files,
             words: flatten(words),
             trigrams: flatten(trigrams),
+            symbols: symbol_list,
         })
     }
 

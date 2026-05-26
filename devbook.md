@@ -39,7 +39,7 @@ Crates de base :
 - `rayon` : indexation parallèle.
 - `roaring` : bitmaps rapides.
 - `memmap2` : mmap snapshot/index.
-- `tree-sitter` : symboles.
+- `tree-sitter` : symboles. Rust est branché en premier.
 - `notify` : watcher.
 - `tokio`, `axum` : HTTP local.
 - `ropey` : édition texte.
@@ -328,18 +328,18 @@ Bench contre :
 
 ### Phase 6: Symboles
 
-- [ ] Ajouter `tree-sitter`.
-- [ ] Parser Rust.
+- [x] Ajouter `tree-sitter`.
+- [x] Parser Rust.
 - [ ] Parser TypeScript.
 - [ ] Parser JavaScript.
 - [ ] Parser Python.
 - [ ] Parser Go.
 - [ ] Parser PHP.
 - [ ] Parser TSX.
-- [ ] Commande `outline`.
-- [ ] Commande `symbol`.
+- [x] Commande `outline`.
+- [x] Commande `symbol`.
 - [ ] Index `symbols_by_name`.
-- [ ] Tests symboles.
+- [x] Tests symboles.
 
 ### Phase 7: Dépendances
 
@@ -363,8 +363,8 @@ Bench contre :
 - [x] Tool `repolens_status`.
 - [ ] Tool `repolens_snapshot`.
 - [x] Tool `repolens_bundle`.
-- [ ] Tool `repolens_outline`.
-- [ ] Tool `repolens_symbol`.
+- [x] Tool `repolens_outline`.
+- [x] Tool `repolens_symbol`.
 - [ ] Tool `repolens_deps`.
 - [x] Tests MCP request/response.
 
@@ -424,8 +424,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Préparer symboles avec `tree-sitter`.
-2. Ajouter benchmarks simples contre `rg`.
-3. Ajouter commandes `outline` et `symbol`.
-4. Ajouter release GitHub multi-OS.
-5. Ajouter install PowerShell.
+1. Ajouter parser TypeScript/JavaScript.
+2. Ajouter parser Python.
+3. Ajouter index `symbols_by_name`.
+4. Ajouter benchmarks simples contre `rg`.
+5. Ajouter release GitHub multi-OS.

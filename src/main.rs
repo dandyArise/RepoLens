@@ -8,6 +8,7 @@ mod scanner;
 mod search;
 mod security;
 mod snapshot;
+mod symbols;
 
 use anyhow::Result;
 use clap::Parser;
@@ -34,6 +35,7 @@ fn main() -> Result<()> {
             println!("files: {}", index.files.len());
             println!("words: {}", index.words.len());
             println!("trigrams: {}", index.trigrams.len());
+            println!("symbols: {}", index.symbols.len());
         }
         Command::Search { query, root, limit } => {
             let index = snapshot::load_or_build(&root)?;
@@ -54,6 +56,14 @@ fn main() -> Result<()> {
         }
         Command::Mcp { root } => {
             mcp::serve(&root)?;
+        }
+        Command::Outline { path, root } => {
+            let index = snapshot::load_or_build(&root)?;
+            symbols::print_outline(&index, &path);
+        }
+        Command::Symbol { name, root, limit } => {
+            let index = snapshot::load_or_build(&root)?;
+            symbols::print_symbols(&index, &name, limit);
         }
     }
 

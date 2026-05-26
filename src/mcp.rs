@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::index::ProjectIndex;
-use crate::{read, search, snapshot};
+use crate::{read, search, snapshot, symbols};
 
 #[derive(Debug, Deserialize)]
 struct Request {
@@ -133,6 +133,16 @@ fn tools() -> Vec<Value> {
             "Run multiple read-only RepoLens tools in one call.",
             json!({"type": "object", "required": ["ops"], "properties": {"ops": {"type": "array", "items": {"type": "object", "required": ["tool"], "properties": {"tool": {"type": "string"}, "arguments": {"type": "object"}}}}}}),
         ),
+        tool(
+            "repolens_outline",
+            "Return symbols in one indexed file.",
+            json!({"type": "object", "required": ["path"], "properties": {"path": {"type": "string"}}}),
+        ),
+        tool(
+            "repolens_symbol",
+            "Find indexed symbols by name.",
+            json!({"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "limit": {"type": "integer"}}}),
+        ),
     ]
 }
 
@@ -167,7 +177,8 @@ fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value>
             "root": index.root,
             "files": index.files.len(),
             "words": index.words.len(),
-            "trigrams": index.trigrams.len()
+            "trigrams": index.trigrams.len(),
+            "symbols": index.symbols.len()
         }),
         "repolens_tree" => {
             let limit = get_usize(&args, "limit").unwrap_or(200);
@@ -197,6 +208,15 @@ fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value>
                 max_bytes,
                 hash
             )?)
+        }
+        "repolens_outline" => {
+            let path = Utf8PathBuf::from(get_str(&args, "path")?);
+            json!(symbols::outline(index, &path))
+        }
+        "repolens_symbol" => {
+            let name = get_str(&args, "name")?;
+            let limit = get_usize(&args, "limit").unwrap_or(20);
+            json!(symbols::find(index, name, limit))
         }
         "repolens_bundle" => {
             let ops = args

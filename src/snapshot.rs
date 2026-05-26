@@ -11,7 +11,7 @@ pub fn load_or_build(root: &Path) -> Result<ProjectIndex> {
     let root = canonical_utf8(root)?;
     let index_path = index_path(&root);
     match fs::read_to_string(&index_path) {
-        Ok(raw) => serde_json::from_str(&raw).context("invalid .repolens/index.json"),
+        Ok(raw) => serde_json::from_str(&raw).or_else(|_| ProjectIndex::build(root.as_std_path())),
         Err(_) => ProjectIndex::build(root.as_std_path()),
     }
 }
