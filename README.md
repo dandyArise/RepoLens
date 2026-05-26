@@ -21,7 +21,6 @@ Implemented today:
 
 Not implemented yet:
 
-- Release binaries.
 - Install scripts.
 - HTTP local server.
 - Atomic edit command.
@@ -45,6 +44,24 @@ Binary:
 
 ```powershell
 .\target\release\repolens.exe --help
+```
+
+## Release Builds
+
+Release workflow targets:
+
+- `repolens-windows-x86_64.zip`
+- `repolens-linux-x86_64.tar.gz`
+- `repolens-darwin-x86_64.tar.gz`
+- `repolens-darwin-arm64.tar.gz`
+
+Each archive is accompanied by a `.sha256` file. Tagged releases publish a combined `checksums.sha256`.
+
+To create a release:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 During development:

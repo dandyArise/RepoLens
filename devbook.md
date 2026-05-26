@@ -325,11 +325,11 @@ Bench contre :
 - [x] `cargo fmt --check`.
 - [x] `cargo clippy`.
 - [x] `cargo test`.
-- [ ] Build release Windows.
-- [ ] Build release Linux x86_64.
+- [x] Build release Windows.
+- [x] Build release Linux x86_64.
 - [ ] Build release Linux arm64.
-- [ ] Build release macOS x86_64.
-- [ ] Build release macOS arm64.
+- [x] Build release macOS x86_64.
+- [x] Build release macOS arm64.
 
 ### Phase 6: Symboles
 
@@ -416,8 +416,8 @@ Bench contre :
 
 - [ ] Installer Windows `install.ps1`.
 - [ ] Installer Linux/macOS `install.sh`.
-- [ ] Checksums SHA256.
-- [ ] Archives zip/tar.gz.
+- [x] Checksums SHA256.
+- [x] Archives zip/tar.gz.
 - [ ] Auto-config Codex.
 - [ ] Auto-config Claude.
 - [ ] Auto-config Cursor.
@@ -429,8 +429,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter résolution TS/JS relative.
-2. Ajouter release GitHub multi-OS.
-3. Ajouter install PowerShell.
+1. Ajouter install PowerShell.
+2. Ajouter install shell Linux/macOS.
+3. Ajouter résolution TS/JS relative.
 4. Ajouter watcher incrémental.
 5. Ajouter édition atomique.
