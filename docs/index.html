@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="RepoLens — Index local rapide de codebase pour agents IA. CLI Rust + serveur MCP. Cross-platform.">
+<meta name="keywords" content="RepoLens, MCP, codebase, index, Rust, AI, agent, CLI, tree-sitter, symbol extraction">
+<meta property="og:title" content="RepoLens — Fast local codebase index for AI agents">
+<meta property="og:description" content="RepoLens scanne ton repo, construit des index compacts, et expose des outils de navigation via CLI et serveur MCP stdio.">
+<meta property="og:url" content="https://dandyarise.github.io/RepoLens">
+<meta name="twitter:card" content="summary_large_image">
+<title>RepoLens — Fast local codebase index for AI agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Syne:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0e0f;
+    --bg2: #111416;
+    --bg3: #181b1d;
+    --border: #252a2c;
+    --amber: #f5a623;
+    --amber-dim: rgba(245,166,35,0.12);
+    --amber-glow: rgba(245,166,35,0.05);
+    --text: #d4cfc8;
+    --text-dim: #7a756e;
+    --text-bright: #f0ebe3;
+    --green: #5fcf80;
+    --red: #e05c5c;
+    --blue: #5b9cf6;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* NOISE OVERLAY */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: .4;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 2.5rem;
+    height: 56px;
+    background: rgba(12,14,15,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-logo {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: var(--text-bright);
+    text-decoration: none;
+    letter-spacing: -0.02em;
+    display: flex; align-items: center; gap: .5rem;
+  }
+
+  .nav-logo .lens-dot {
+    width: 8px; height: 8px;
+    background: var(--amber);
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 8px var(--amber);
+    animation: pulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--amber); }
+    50% { opacity: .5; box-shadow: 0 0 3px var(--amber); }
+  }
+
+  .nav-links {
+    display: flex; align-items: center; gap: 1.8rem;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: .8rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    transition: color .2s;
+  }
+
+  .nav-links a:hover { color: var(--amber); }
+
+  .nav-right {
+    display: flex; align-items: center; gap: 1rem;
+  }
+
+  .lang-toggle {
+    background: none; border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: .75rem;
+    padding: .2rem .6rem;
+    cursor: pointer;
+    transition: all .2s;
+  }
+
+  .lang-toggle:hover { border-color: var(--amber); color: var(--amber); }
+
+  .btn-github {
+    background: none; border: 1px solid var(--amber);
+    border-radius: 4px;
+    color: var(--amber);
+    font-family: var(--mono);
+    font-size: .8rem;
+    padding: .35rem .9rem;
+    text-decoration: none;
+    transition: all .2s;
+  }
+
+  .btn-github:hover { background: var(--amber-dim); }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    padding: 100px 2rem 4rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: .25;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%);
+  }
+
+  .hero-glow {
+    position: absolute;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(245,166,35,.07) 0%, transparent 65%);
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    pointer-events: none;
+  }
+
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: .5rem;
+    background: var(--amber-dim);
+    border: 1px solid rgba(245,166,35,.25);
+    border-radius: 100px;
+    padding: .3rem .9rem;
+    font-size: .75rem;
+    color: var(--amber);
+    letter-spacing: .08em;
+    margin-bottom: 2.5rem;
+    animation: fadeUp .6s ease both;
+  }
+
+  .hero-badge::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: var(--amber);
+    border-radius: 50%;
+  }
+
+  h1 {
+    font-family: var(--sans);
+    font-size: clamp(2.4rem, 6vw, 5rem);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -.04em;
+    color: var(--text-bright);
+    max-width: 820px;
+    animation: fadeUp .6s .1s ease both;
+    position: relative;
+  }
+
+  h1 em {
+    font-style: normal;
+    color: var(--amber);
+  }
+
+  .hero-sub {
+    font-family: var(--mono);
+    font-size: .95rem;
+    color: var(--text-dim);
+    max-width: 520px;
+    margin: 1.5rem auto 2.5rem;
+    line-height: 1.8;
+    animation: fadeUp .6s .2s ease both;
+  }
+
+  .hero-ctas {
+    display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
+    animation: fadeUp .6s .3s ease both;
+  }
+
+  .btn-primary {
+    background: var(--amber);
+    color: #0c0e0f;
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: .85rem;
+    padding: .7rem 1.6rem;
+    border-radius: 4px;
+    text-decoration: none;
+    border: none; cursor: pointer;
+    transition: all .2s;
+    letter-spacing: .03em;
+  }
+
+  .btn-primary:hover { background: #fbb83a; transform: translateY(-1px); }
+
+  .btn-outline {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: .85rem;
+    padding: .7rem 1.6rem;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: all .2s;
+    letter-spacing: .03em;
+  }
+
+  .btn-outline:hover { border-color: var(--amber); color: var(--amber); }
+
+  /* TERMINAL */
+  .terminal-wrap {
+    width: 100%; max-width: 680px;
+    margin: 4rem auto 0;
+    animation: fadeUp .6s .4s ease both;
+    position: relative;
+  }
+
+  .terminal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(0,0,0,.5), 0 0 0 1px rgba(245,166,35,.04);
+  }
+
+  .terminal-bar {
+    background: var(--bg3);
+    padding: .6rem 1rem;
+    display: flex; align-items: center; gap: .5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.r { background: #e05c5c; }
+  .dot.y { background: #f5a623; }
+  .dot.g { background: #5fcf80; }
+
+  .terminal-title {
+    margin-left: auto; margin-right: auto;
+    font-size: .75rem;
+    color: var(--text-dim);
+  }
+
+  .terminal-body {
+    padding: 1.2rem 1.5rem;
+    font-size: .82rem;
+    line-height: 1.9;
+  }
+
+  .t-prompt { color: var(--amber); }
+  .t-cmd { color: var(--text-bright); }
+  .t-comment { color: var(--text-dim); font-style: italic; }
+  .t-key { color: var(--blue); }
+  .t-val { color: var(--green); }
+  .t-num { color: var(--amber); }
+
+  /* STATS TICKER */
+  .ticker {
+    overflow: hidden;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: .9rem 0;
+    background: var(--bg2);
+  }
+
+  .ticker-inner {
+    display: flex; gap: 3rem;
+    animation: scroll 25s linear infinite;
+    white-space: nowrap;
+  }
+
+  .ticker-item {
+    font-size: .8rem;
+    color: var(--text-dim);
+    display: flex; align-items: center; gap: .6rem;
+    flex-shrink: 0;
+  }
+
+  .ticker-item span { color: var(--amber); font-weight: 500; }
+
+  @keyframes scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  /* SECTIONS */
+  section {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 6rem 2rem;
+  }
+
+  .section-label {
+    font-size: .72rem;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 1rem;
+    display: flex; align-items: center; gap: .6rem;
+  }
+
+  .section-label::before {
+    content: '//';
+    opacity: .5;
+  }
+
+  h2 {
+    font-family: var(--sans);
+    font-size: clamp(1.7rem, 3vw, 2.6rem);
+    font-weight: 800;
+    letter-spacing: -.03em;
+    color: var(--text-bright);
+    line-height: 1.15;
+    margin-bottom: 1rem;
+  }
+
+  h2 em { font-style: normal; color: var(--amber); }
+
+  .section-desc {
+    color: var(--text-dim);
+    max-width: 520px;
+    margin-bottom: 3rem;
+    font-size: .9rem;
+  }
+
+  /* HOW IT WORKS */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .step {
+    background: var(--bg2);
+    padding: 2rem;
+    position: relative;
+    transition: background .2s;
+  }
+
+  .step:hover { background: var(--bg3); }
+
+  .step-num {
+    font-size: .7rem;
+    color: var(--amber);
+    letter-spacing: .1em;
+    margin-bottom: 1.2rem;
+    font-weight: 500;
+  }
+
+  .step h3 {
+    font-family: var(--sans);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: .7rem;
+    letter-spacing: -.02em;
+  }
+
+  .step p { color: var(--text-dim); font-size: .85rem; line-height: 1.7; }
+
+  .step-code {
+    margin-top: 1.2rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: .7rem 1rem;
+    font-size: .78rem;
+    color: var(--green);
+  }
+
+  /* FEATURES GRID */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .feature {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    transition: border-color .2s, transform .2s;
+  }
+
+  .feature:hover { border-color: rgba(245,166,35,.35); transform: translateY(-2px); }
+
+  .feature-icon {
+    width: 36px; height: 36px;
+    background: var(--amber-dim);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+
+  .feature h4 {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: .95rem;
+    color: var(--text-bright);
+    margin-bottom: .4rem;
+    letter-spacing: -.02em;
+  }
+
+  .feature p { font-size: .82rem; color: var(--text-dim); line-height: 1.6; }
+
+  /* COMMANDS */
+  .commands {
+    display: grid; gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .cmd-row {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    display: grid;
+    grid-template-columns: 130px 1fr auto;
+    align-items: center;
+    gap: 1.5rem;
+    transition: border-color .2s;
+  }
+
+  .cmd-row:hover { border-color: var(--amber); }
+
+  .cmd-name {
+    color: var(--amber);
+    font-size: .85rem;
+    font-weight: 500;
+  }
+
+  .cmd-desc { color: var(--text-dim); font-size: .82rem; }
+
+  .cmd-example {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: .25rem .7rem;
+    border-radius: 3px;
+    font-size: .75rem;
+    color: var(--green);
+    white-space: nowrap;
+  }
+
+  /* MCP SECTION */
+  .mcp-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+
+  @media (max-width: 768px) {
+    .mcp-grid { grid-template-columns: 1fr; }
+    .cmd-row { grid-template-columns: 1fr; gap: .5rem; }
+    nav { padding: 0 1rem; }
+    .nav-links { display: none; }
+  }
+
+  .mcp-tools-list {
+    display: flex; flex-wrap: wrap; gap: .5rem;
+    margin-top: 1rem;
+  }
+
+  .mcp-tool {
+    background: var(--amber-dim);
+    border: 1px solid rgba(245,166,35,.2);
+    border-radius: 4px;
+    color: var(--amber);
+    font-size: .78rem;
+    padding: .25rem .7rem;
+  }
+
+  /* INSTALL */
+  .install-tabs {
+    display: flex; gap: 0; margin-bottom: -1px; position: relative; z-index: 1;
+  }
+
+  .tab-btn {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: .8rem;
+    padding: .5rem 1.2rem;
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+    transition: all .2s;
+  }
+
+  .tab-btn.active { background: var(--bg3); color: var(--amber); border-color: rgba(245,166,35,.3); }
+
+  .tab-content {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 0 8px 8px 8px;
+    padding: 1.5rem;
+    display: none;
+  }
+
+  .tab-content.active { display: block; }
+
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    margin: .5rem 0;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .code-block code {
+    font-size: .8rem;
+    color: var(--text-bright);
+  }
+
+  .copy-btn {
+    background: none; border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: .7rem;
+    padding: .15rem .5rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all .2s;
+  }
+
+  .copy-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .copy-btn.copied { color: var(--green); border-color: var(--green); }
+
+  /* ROADMAP */
+  .roadmap-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-top: 1rem;
+  }
+
+  @media (max-width: 600px) { .roadmap-grid { grid-template-columns: 1fr; } }
+
+  .roadmap-col h3 {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-bright);
+    margin-bottom: 1rem;
+    letter-spacing: -.02em;
+  }
+
+  .roadmap-item {
+    display: flex; gap: .8rem; align-items: flex-start;
+    padding: .5rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: .83rem;
+  }
+
+  .roadmap-item:last-child { border-bottom: none; }
+
+  .ri-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0; margin-top: .45rem;
+  }
+
+  .ri-dot.done { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .ri-dot.todo { background: var(--border); border: 1px solid var(--text-dim); }
+
+  .ri-text { color: var(--text-dim); }
+  .ri-text.done { color: var(--text); }
+
+  /* FOOTER */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2.5rem;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+    background: var(--bg2);
+  }
+
+  .footer-brand {
+    font-family: var(--sans);
+    font-weight: 800;
+    color: var(--text-bright);
+    font-size: .95rem;
+    letter-spacing: -.02em;
+  }
+
+  footer p { font-size: .78rem; color: var(--text-dim); }
+
+  .footer-links { display: flex; gap: 1.5rem; }
+  .footer-links a { color: var(--text-dim); font-size: .8rem; text-decoration: none; transition: color .2s; }
+  .footer-links a:hover { color: var(--amber); }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .reveal {
+    opacity: 0; transform: translateY(20px);
+    transition: opacity .6s ease, transform .6s ease;
+  }
+
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--amber); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo"><span class="lens-dot"></span>RepoLens</a>
+  <ul class="nav-links">
+    <li><a href="#how" data-fr="Comment ça marche" data-en="How it works">Comment ça marche</a></li>
+    <li><a href="#features" data-fr="Fonctionnalités" data-en="Features">Fonctionnalités</a></li>
+    <li><a href="#commands" data-fr="Commandes" data-en="Commands">Commandes</a></li>
+    <li><a href="#install" data-fr="Installer" data-en="Install">Installer</a></li>
+  </ul>
+  <div class="nav-right">
+    <button class="lang-toggle" onclick="toggleLang()">EN</button>
+    <a class="btn-github" href="https://github.com/dandyArise/RepoLens" target="_blank">GitHub ↗</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-glow"></div>
+
+  <div class="hero-badge" data-fr="✦ CLI Rust · Serveur MCP · Cross-platform" data-en="✦ Rust CLI · MCP Server · Cross-platform">✦ CLI Rust · Serveur MCP · Cross-platform</div>
+
+  <h1 data-fr="L'index local<br>de ta codebase pour les <em>agents IA</em>." data-en="Local codebase<br>index for <em>AI agents</em>.">L'index local<br>de ta codebase pour les <em>agents IA</em>.</h1>
+
+  <p class="hero-sub" data-fr="RepoLens scanne ton repo, construit des index compacts et expose des outils de navigation via CLI et serveur MCP stdio — sans infrastructure externe." data-en="RepoLens scans your repo, builds compact local indexes, and exposes code navigation tools via CLI and MCP stdio server — no external infrastructure needed.">RepoLens scanne ton repo, construit des index compacts et expose des outils de navigation via CLI et serveur MCP stdio — sans infrastructure externe.</p>
+
+  <div class="hero-ctas">
+    <a href="#install" class="btn-primary" data-fr="Installer →" data-en="Install →">Installer →</a>
+    <a href="#how" class="btn-outline" data-fr="Voir comment ça marche" data-en="See how it works">Voir comment ça marche</a>
+  </div>
+
+  <div class="terminal-wrap">
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="terminal-title">repolens — zsh</span>
+      </div>
+      <div class="terminal-body">
+        <div><span class="t-prompt">$ </span><span class="t-cmd">repolens index .</span></div>
+        <div><span class="t-comment"># Indexing... 20 files, 136 symbols</span></div>
+        <br>
+        <div><span class="t-prompt">$ </span><span class="t-cmd">repolens status .</span></div>
+        <div><span class="t-key">files</span>: <span class="t-num">20</span> &nbsp; <span class="t-key">words</span>: <span class="t-num">1153</span> &nbsp; <span class="t-key">trigrams</span>: <span class="t-num">8889</span></div>
+        <div><span class="t-key">symbols</span>: <span class="t-num">136</span> &nbsp; <span class="t-key">deps_files</span>: <span class="t-num">14</span></div>
+        <br>
+        <div><span class="t-prompt">$ </span><span class="t-cmd">repolens symbol ProjectIndex .</span></div>
+        <div><span class="t-val">src/indexer.rs</span>:<span class="t-num">42</span> &nbsp; struct <span class="t-val">ProjectIndex</span></div>
+        <br>
+        <div><span class="t-prompt">$ </span><span class="t-cmd">repolens mcp .</span></div>
+        <div><span class="t-comment"># MCP server listening on stdio…</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div class="ticker">
+  <div class="ticker-inner" id="ticker">
+    <span class="ticker-item">⚡ <span>Rust</span> natif</span>
+    <span class="ticker-item">⚡ <span>MCP</span> stdio server</span>
+    <span class="ticker-item">⚡ <span>tree-sitter</span> symbols</span>
+    <span class="ticker-item">⚡ <span>.gitignore</span>-aware</span>
+    <span class="ticker-item">⚡ <span>Windows</span> · Linux · macOS</span>
+    <span class="ticker-item">⚡ index <span>trigram</span> + word</span>
+    <span class="ticker-item">⚡ <span>Rust</span>, TS, JS, Python</span>
+    <span class="ticker-item">⚡ <span>Zero</span> infra externe</span>
+    <span class="ticker-item">⚡ <span>CI</span> multi-plateforme</span>
+    <span class="ticker-item">⚡ Open <span>Source</span></span>
+    <!-- dupliqué pour l'effet infini -->
+    <span class="ticker-item">⚡ <span>Rust</span> natif</span>
+    <span class="ticker-item">⚡ <span>MCP</span> stdio server</span>
+    <span class="ticker-item">⚡ <span>tree-sitter</span> symbols</span>
+    <span class="ticker-item">⚡ <span>.gitignore</span>-aware</span>
+    <span class="ticker-item">⚡ <span>Windows</span> · Linux · macOS</span>
+    <span class="ticker-item">⚡ index <span>trigram</span> + word</span>
+    <span class="ticker-item">⚡ <span>Rust</span>, TS, JS, Python</span>
+    <span class="ticker-item">⚡ <span>Zero</span> infra externe</span>
+    <span class="ticker-item">⚡ <span>CI</span> multi-plateforme</span>
+    <span class="ticker-item">⚡ Open <span>Source</span></span>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="section-label" data-fr="// Comment ça marche" data-en="// How it works">// Comment ça marche</div>
+  <h2 data-fr="Trois étapes. <em>C'est tout.</em>" data-en="Three steps. <em>That's it.</em>">Trois étapes. <em>C'est tout.</em></h2>
+  <p class="section-desc reveal" data-fr="RepoLens scanne ta codebase, extrait les symboles avec tree-sitter, et expose tout via CLI ou MCP." data-en="RepoLens scans your codebase, extracts symbols with tree-sitter, and exposes everything via CLI or MCP.">RepoLens scanne ta codebase, extrait les symboles avec tree-sitter, et expose tout via CLI ou MCP.</p>
+
+  <div class="steps reveal">
+    <div class="step">
+      <div class="step-num">01</div>
+      <h3 data-fr="Lance l'indexation" data-en="Run the index">Lance l'indexation</h3>
+      <p data-fr="RepoLens scanne ton repo, respecte le .gitignore, et protège les fichiers sensibles par défaut." data-en="RepoLens scans your repo, respects .gitignore, and skips sensitive files by default.">RepoLens scanne ton repo, respecte le .gitignore, et protège les fichiers sensibles par défaut.</p>
+      <div class="step-code"><span class="t-prompt">$ </span>repolens index .</div>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <h3 data-fr="Explore ta codebase" data-en="Explore your codebase">Explore ta codebase</h3>
+      <p data-fr="Recherche par mots, trigrammes ou symboles. Lis des fichiers avec plage de lignes. Liste les dépendances." data-en="Search by words, trigrams, or symbols. Read files with line ranges. List dependencies.">Recherche par mots, trigrammes ou symboles. Lis des fichiers avec plage de lignes. Liste les dépendances.</p>
+      <div class="step-code"><span class="t-prompt">$ </span>repolens search "handleAuth" .</div>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <h3 data-fr="Connecte tes agents IA" data-en="Connect your AI agents">Connecte tes agents IA</h3>
+      <p data-fr="Lance le serveur MCP stdio. Ton agent IA peut appeler les outils de navigation directement." data-en="Start the MCP stdio server. Your AI agent can call navigation tools directly.">Lance le serveur MCP stdio. Ton agent IA peut appeler les outils de navigation directement.</p>
+      <div class="step-code"><span class="t-prompt">$ </span>repolens mcp .</div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" style="padding-top:0">
+  <div class="section-label" data-fr="// Fonctionnalités" data-en="// Features">// Fonctionnalités</div>
+  <h2 data-fr="Tout ce qu'il te faut, <em>rien de plus.</em>" data-en="Everything you need, <em>nothing more.</em>">Tout ce qu'il te faut, <em>rien de plus.</em></h2>
+
+  <div class="features reveal">
+    <div class="feature">
+      <div class="feature-icon">🔍</div>
+      <h4 data-fr="Recherche ultra-rapide" data-en="Ultra-fast search">Recherche ultra-rapide</h4>
+      <p data-fr="Index de mots et trigrammes pour des recherches instantanées dans tout le repo." data-en="Word and trigram indexes for instant searches across the whole repo.">Index de mots et trigrammes pour des recherches instantanées dans tout le repo.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🌳</div>
+      <h4 data-fr="Extraction de symboles" data-en="Symbol extraction">Extraction de symboles</h4>
+      <p data-fr="Rust, TypeScript, JavaScript, TSX/JSX, Python — powered by tree-sitter." data-en="Rust, TypeScript, JavaScript, TSX/JSX, Python — powered by tree-sitter.">Rust, TypeScript, JavaScript, TSX/JSX, Python — powered by tree-sitter.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🤖</div>
+      <h4 data-fr="Serveur MCP stdio" data-en="MCP stdio server">Serveur MCP stdio</h4>
+      <p data-fr="9 outils MCP exposés. Compatible Claude, Cursor, Codex et tout agent MCP." data-en="9 MCP tools exposed. Compatible with Claude, Cursor, Codex and any MCP agent.">9 outils MCP exposés. Compatible Claude, Cursor, Codex et tout agent MCP.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🛡️</div>
+      <h4 data-fr="Sécurité par défaut" data-en="Safe by default">Sécurité par défaut</h4>
+      <p data-fr="Fichiers .env, clés PEM, secrets — ignorés automatiquement. Configurable via .repolensrc.toml." data-en=".env files, PEM keys, secrets — skipped automatically. Configurable via .repolensrc.toml.">.env, clés PEM, secrets — ignorés automatiquement. Configurable via .repolensrc.toml.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🖥️</div>
+      <h4 data-fr="Cross-platform" data-en="Cross-platform">Cross-platform</h4>
+      <p data-fr="Windows, Linux, macOS (x86_64 + arm64). CI automatique sur les trois plateformes." data-en="Windows, Linux, macOS (x86_64 + arm64). Automated CI on all three platforms.">Windows, Linux, macOS (x86_64 + arm64). CI automatique sur les trois plateformes.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📦</div>
+      <h4 data-fr="Import / dépendances" data-en="Import / deps">Import / dépendances</h4>
+      <p data-fr="Extraction des imports pour Rust (use, mod), TS/JS (import, require) et Python." data-en="Import extraction for Rust (use, mod), TS/JS (import, require) and Python.">Extraction des imports pour Rust (use, mod), TS/JS (import, require) et Python.</p>
+    </div>
+  </div>
+</section>
+
+<!-- COMMANDS -->
+<section id="commands" style="padding-top:0">
+  <div class="section-label" data-fr="// Commandes CLI" data-en="// CLI Commands">// Commandes CLI</div>
+  <h2 data-fr="Tout en <em>ligne de commande.</em>" data-en="Everything from the <em>command line.</em>">Tout en <em>ligne de commande.</em></h2>
+
+  <div class="commands reveal">
+    <div class="cmd-row">
+      <span class="cmd-name">index</span>
+      <span class="cmd-desc" data-fr="Construit .repolens/index.json" data-en="Builds .repolens/index.json">Construit .repolens/index.json</span>
+      <span class="cmd-example">repolens index .</span>
+    </div>
+    <div class="cmd-row">
+      <span class="cmd-name">search</span>
+      <span class="cmd-desc" data-fr="Recherche dans le contenu indexé" data-en="Search indexed content">Recherche dans le contenu indexé</span>
+      <span class="cmd-example">repolens search "handleAuth" .</span>
+    </div>
+    <div class="cmd-row">
+      <span class="cmd-name">symbol</span>
+      <span class="cmd-desc" data-fr="Trouve les symboles par nom" data-en="Find symbols by name">Trouve les symboles par nom</span>
+      <span class="cmd-example">repolens symbol MyStruct .</span>
+    </div>
+    <div class="cmd-row">
+      <span class="cmd-name">outline</span>
+      <span class="cmd-desc" data-fr="Liste les symboles d'un fichier" data-en="List symbols in a file">Liste les symboles d'un fichier</span>
+      <span class="cmd-example">repolens outline src/main.rs .</span>
+    </div>
+    <div class="cmd-row">
+      <span class="cmd-name">deps</span>
+      <span class="cmd-desc" data-fr="Liste les imports d'un fichier" data-en="List a file's imports">Liste les imports d'un fichier</span>
+      <span class="cmd-example">repolens deps src/main.rs .</span>
+    </div>
+    <div class="cmd-row">
+      <span class="cmd-name">read</span>
+      <span class="cmd-desc" data-fr="Lit un fichier avec plage de lignes" data-en="Read a file with line range">Lit un fichier avec plage de lignes</span>
+      <span class="cmd-example">repolens read src/lib.rs . --lines 1-80</span>
+    </div>
+    <div class="cmd-row">
+      <span class="cmd-name">status</span>
+      <span class="cmd-desc" data-fr="Affiche les compteurs de l'index" data-en="Print index stats">Affiche les compteurs de l'index</span>
+      <span class="cmd-example">repolens status .</span>
+    </div>
+    <div class="cmd-row">
+      <span class="cmd-name">mcp</span>
+      <span class="cmd-desc" data-fr="Démarre le serveur MCP stdio" data-en="Start MCP stdio server">Démarre le serveur MCP stdio</span>
+      <span class="cmd-example">repolens mcp .</span>
+    </div>
+  </div>
+</section>
+
+<!-- MCP -->
+<section style="padding-top:0">
+  <div class="section-label" data-fr="// Serveur MCP" data-en="// MCP Server">// Serveur MCP</div>
+  <h2 data-fr="Branché sur tes <em>agents IA.</em>" data-en="Plugged into your <em>AI agents.</em>">Branché sur tes <em>agents IA.</em></h2>
+
+  <div class="mcp-grid reveal">
+    <div>
+      <p class="section-desc" style="margin-bottom:1.5rem" data-fr="RepoLens expose 9 outils MCP via stdio. Connecte Claude, Cursor, Codex ou n'importe quel agent compatible MCP directement à ton index local." data-en="RepoLens exposes 9 MCP tools via stdio. Connect Claude, Cursor, Codex or any MCP-compatible agent directly to your local index.">RepoLens expose 9 outils MCP via stdio. Connecte Claude, Cursor, Codex ou n'importe quel agent compatible MCP directement à ton index local.</p>
+      <div class="mcp-tools-list">
+        <span class="mcp-tool">repolens_status</span>
+        <span class="mcp-tool">repolens_tree</span>
+        <span class="mcp-tool">repolens_search</span>
+        <span class="mcp-tool">repolens_word</span>
+        <span class="mcp-tool">repolens_read</span>
+        <span class="mcp-tool">repolens_outline</span>
+        <span class="mcp-tool">repolens_symbol</span>
+        <span class="mcp-tool">repolens_deps</span>
+        <span class="mcp-tool">repolens_bundle</span>
+      </div>
+    </div>
+    <div class="terminal" style="margin-top:0">
+      <div class="terminal-bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="terminal-title">mcp — json-rpc</span>
+      </div>
+      <div class="terminal-body" style="font-size:.76rem">
+        <div style="color:var(--text-dim)">// Appel bundle multi-outils</div>
+        <br>
+        <div><span style="color:var(--blue)">{"jsonrpc"</span>:<span style="color:var(--green)">"2.0"</span>,</div>
+        <div>&nbsp;<span style="color:var(--blue)">"method"</span>:<span style="color:var(--green)">"tools/call"</span>,</div>
+        <div>&nbsp;<span style="color:var(--blue)">"params"</span>: {</div>
+        <div>&nbsp;&nbsp;<span style="color:var(--blue)">"name"</span>:<span style="color:var(--green)">"repolens_bundle"</span>,</div>
+        <div>&nbsp;&nbsp;<span style="color:var(--blue)">"arguments"</span>: {</div>
+        <div>&nbsp;&nbsp;&nbsp;<span style="color:var(--blue)">"ops"</span>: [</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color:var(--blue)">"tool"</span>:<span style="color:var(--amber)">"repolens_status"</span>},</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color:var(--blue)">"tool"</span>:<span style="color:var(--amber)">"repolens_search"</span>,</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--blue)">"arguments"</span>:{<span style="color:var(--blue)">"query"</span>:<span style="color:var(--green)">"main"</span>}}</div>
+        <div>&nbsp;&nbsp;&nbsp;]</div>
+        <div>&nbsp;&nbsp;}</div>
+        <div>&nbsp;}}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section id="install" style="padding-top:0">
+  <div class="section-label" data-fr="// Installation" data-en="// Installation">// Installation</div>
+  <h2 data-fr="Prêt en <em>quelques minutes.</em>" data-en="Ready in <em>minutes.</em>">Prêt en <em>quelques minutes.</em></h2>
+
+  <div class="install-tabs reveal">
+    <button class="tab-btn active" onclick="showTab('src')" data-fr="Depuis les sources" data-en="From source">Depuis les sources</button>
+    <button class="tab-btn" onclick="showTab('release')" data-fr="Release binaire" data-en="Binary release">Release binaire</button>
+  </div>
+
+  <div class="tab-content active" id="tab-src">
+    <div class="code-block"><code>git clone https://github.com/dandyArise/RepoLens.git</code><button class="copy-btn" onclick="copyCode(this, 'git clone https://github.com/dandyArise/RepoLens.git')">COPY</button></div>
+    <div class="code-block"><code>cd RepoLens</code><button class="copy-btn" onclick="copyCode(this, 'cd RepoLens')">COPY</button></div>
+    <div class="code-block"><code>cargo build --release</code><button class="copy-btn" onclick="copyCode(this, 'cargo build --release')">COPY</button></div>
+    <div class="code-block"><code>./target/release/repolens --help</code><button class="copy-btn" onclick="copyCode(this, './target/release/repolens --help')">COPY</button></div>
+  </div>
+
+  <div class="tab-content" id="tab-release">
+    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:1rem" data-fr="Télécharge le binaire correspondant à ta plateforme depuis les releases GitHub :" data-en="Download the binary for your platform from the GitHub releases:">Télécharge le binaire correspondant à ta plateforme depuis les releases GitHub :</p>
+    <div class="code-block"><code>repolens-windows-x86_64.zip</code><button class="copy-btn" onclick="copyCode(this, 'repolens-windows-x86_64.zip')">COPY</button></div>
+    <div class="code-block"><code>repolens-linux-x86_64.tar.gz</code><button class="copy-btn" onclick="copyCode(this, 'repolens-linux-x86_64.tar.gz')">COPY</button></div>
+    <div class="code-block"><code>repolens-darwin-x86_64.tar.gz</code><button class="copy-btn" onclick="copyCode(this, 'repolens-darwin-x86_64.tar.gz')">COPY</button></div>
+    <div class="code-block"><code>repolens-darwin-arm64.tar.gz</code><button class="copy-btn" onclick="copyCode(this, 'repolens-darwin-arm64.tar.gz')">COPY</button></div>
+    <p style="color:var(--text-dim);font-size:.78rem;margin-top:.8rem" data-fr="Chaque archive est accompagnée d'un fichier .sha256 pour vérification." data-en="Each archive comes with a .sha256 checksum file.">Chaque archive est accompagnée d'un fichier .sha256 pour vérification.</p>
+  </div>
+</section>
+
+<!-- ROADMAP -->
+<section style="padding-top:0">
+  <div class="section-label" data-fr="// Roadmap" data-en="// Roadmap">// Roadmap</div>
+  <h2 data-fr="Ce qui est fait, <em>ce qui vient.</em>" data-en="What's done, <em>what's next.</em>">Ce qui est fait, <em>ce qui vient.</em></h2>
+
+  <div class="roadmap-grid reveal">
+    <div class="roadmap-col">
+      <h3 data-fr="✅ Implémenté" data-en="✅ Implemented">✅ Implémenté</h3>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="CLI Rust cross-platform" data-en="Cross-platform Rust CLI">CLI Rust cross-platform</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Scanner .gitignore-aware" data-en=".gitignore-aware scanner">Scanner .gitignore-aware</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Index word + trigram" data-en="Word + trigram index">Index word + trigram</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Extraction de symboles (tree-sitter)" data-en="Symbol extraction (tree-sitter)">Extraction de symboles (tree-sitter)</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Serveur MCP stdio (9 outils)" data-en="MCP stdio server (9 tools)">Serveur MCP stdio (9 outils)</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="CI Windows / Linux / macOS" data-en="CI Windows / Linux / macOS">CI Windows / Linux / macOS</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Snapshot JSON (.repolens/index.json)" data-en="JSON snapshot (.repolens/index.json)">Snapshot JSON (.repolens/index.json)</span></div>
+    </div>
+    <div class="roadmap-col">
+      <h3 data-fr="🔜 En cours / Prévu" data-en="🔜 Upcoming">🔜 En cours / Prévu</h3>
+      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Scripts d'installation (PowerShell / shell)" data-en="Install scripts (PowerShell / shell)">Scripts d'installation (PowerShell / shell)</span></div>
+      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Serveur HTTP localhost" data-en="HTTP localhost server">Serveur HTTP localhost</span></div>
+      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Commande d'édition atomique" data-en="Atomic edit command">Commande d'édition atomique</span></div>
+      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Watcher + réindexation incrémentale" data-en="Watcher + incremental reindex">Watcher + réindexation incrémentale</span></div>
+      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Résolution de dépendances relatives TS/JS" data-en="TS/JS relative dep resolution">Résolution de dépendances relatives TS/JS</span></div>
+      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="MCP auto-config Claude / Cursor / Codex" data-en="MCP auto-config Claude / Cursor / Codex">MCP auto-config Claude / Cursor / Codex</span></div>
+      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Indexation parallèle" data-en="Parallel indexing">Indexation parallèle</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div>
+    <div class="footer-brand">RepoLens</div>
+    <p data-fr="Open source · by dandyArise" data-en="Open source · by dandyArise">Open source · by dandyArise</p>
+  </div>
+  <div class="footer-links">
+    <a href="https://github.com/dandyArise/RepoLens" target="_blank">GitHub</a>
+    <a href="https://github.com/dandyArise/RepoLens/blob/main/README.md" target="_blank" data-fr="Docs" data-en="Docs">Docs</a>
+    <a href="https://github.com/dandyArise/RepoLens/issues" target="_blank" data-fr="Issues" data-en="Issues">Issues</a>
+  </div>
+</footer>
+
+<script>
+  // LANG TOGGLE
+  let lang = 'fr';
+  function toggleLang() {
+    lang = lang === 'fr' ? 'en' : 'fr';
+    document.querySelector('.lang-toggle').textContent = lang === 'fr' ? 'EN' : 'FR';
+    document.querySelectorAll('[data-fr]').forEach(el => {
+      const txt = el.getAttribute('data-' + lang);
+      if (!txt) return;
+      if (el.tagName === 'H1' || el.tagName === 'H2') {
+        el.innerHTML = txt;
+      } else {
+        el.textContent = txt;
+      }
+    });
+  }
+
+  // TABS
+  function showTab(id) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + id).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  // COPY
+  function copyCode(btn, text) {
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'COPIED';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'COPY'; btn.classList.remove('copied'); }, 1800);
+    });
+  }
+
+  // REVEAL ON SCROLL
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
