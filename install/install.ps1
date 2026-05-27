@@ -1,0 +1,67 @@
+param(
+    [string]$Version = "latest",
+    [string]$InstallDir = "$env:USERPROFILE\bin",
+    [string]$Repo = "dandyArise/RepoLens"
+)
+
+$ErrorActionPreference = "Stop"
+
+function Get-Release {
+    param([string]$Repo, [string]$Version)
+
+    $headers = @{ "User-Agent" = "repolens-installer" }
+    if ($Version -eq "latest") {
+        return Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$Repo/releases/latest"
+    }
+
+    $tag = if ($Version.StartsWith("v")) { $Version } else { "v$Version" }
+    return Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$Repo/releases/tags/$tag"
+}
+
+function Select-Asset {
+    param($Release, [string]$Name)
+
+    $asset = $Release.assets | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+    if (-not $asset) {
+        throw "release asset not found: $Name"
+    }
+    return $asset
+}
+
+$assetName = "repolens-windows-x86_64.zip"
+$release = Get-Release -Repo $Repo -Version $Version
+$archiveAsset = Select-Asset -Release $release -Name $assetName
+$checksumAsset = Select-Asset -Release $release -Name "$assetName.sha256"
+
+$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("repolens-install-" + [System.Guid]::NewGuid())
+New-Item -ItemType Directory -Path $tmp | Out-Null
+
+try {
+    $archivePath = Join-Path $tmp $assetName
+    $checksumPath = Join-Path $tmp "$assetName.sha256"
+
+    Invoke-WebRequest -UseBasicParsing -Uri $archiveAsset.browser_download_url -OutFile $archivePath
+    Invoke-WebRequest -UseBasicParsing -Uri $checksumAsset.browser_download_url -OutFile $checksumPath
+
+    $expected = (Get-Content $checksumPath -Raw).Trim().Split(" ")[0].ToLowerInvariant()
+    $actual = (Get-FileHash -Algorithm SHA256 $archivePath).Hash.ToLowerInvariant()
+    if ($expected -ne $actual) {
+        throw "checksum mismatch"
+    }
+
+    Expand-Archive -Path $archivePath -DestinationPath $tmp -Force
+    $exe = Get-ChildItem -Path $tmp -Filter repolens.exe -Recurse | Select-Object -First 1
+    if (-not $exe) {
+        throw "repolens.exe not found in archive"
+    }
+
+    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+    Copy-Item -Path $exe.FullName -Destination (Join-Path $InstallDir "repolens.exe") -Force
+
+    Write-Host "Installed repolens to $InstallDir"
+    Write-Host "Add this directory to PATH if needed:"
+    Write-Host "  $InstallDir"
+}
+finally {
+    Remove-Item -Recurse -Force -LiteralPath $tmp -ErrorAction SilentlyContinue
+}

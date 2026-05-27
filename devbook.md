@@ -414,8 +414,8 @@ Bench contre :
 
 ### Phase 12: Release
 
-- [ ] Installer Windows `install.ps1`.
-- [ ] Installer Linux/macOS `install.sh`.
+- [x] Installer Windows `install.ps1`.
+- [x] Installer Linux/macOS `install.sh`.
 - [x] Checksums SHA256.
 - [x] Archives zip/tar.gz.
 - [ ] Auto-config Codex.
@@ -429,8 +429,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter install PowerShell.
-2. Ajouter install shell Linux/macOS.
-3. Ajouter résolution TS/JS relative.
-4. Ajouter watcher incrémental.
-5. Ajouter HTTP local.
+1. Ajouter `repolens init` pour auto-config MCP.
+2. Ajouter résolution TS/JS relative.
+3. Ajouter watcher incrémental.
+4. Ajouter HTTP local.
+5. Ajouter Linux arm64 release.

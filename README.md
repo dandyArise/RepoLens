@@ -21,7 +21,6 @@ Implemented today:
 
 Not implemented yet:
 
-- Install scripts.
 - HTTP local server.
 - Watcher/incremental reindex.
 - Deep dependency resolution/reverse deps.
@@ -67,6 +66,30 @@ During development:
 
 ```powershell
 cargo run -- --help
+```
+
+## Install From Release
+
+Windows PowerShell:
+
+```powershell
+iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.ps1 -UseBasicParsing | iex
+```
+
+Linux/macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.sh | sh
+```
+
+Installer options:
+
+```powershell
+.\install\install.ps1 -Version v0.1.0 -InstallDir "$env:USERPROFILE\bin"
+```
+
+```sh
+REPOLENS_VERSION=v0.1.0 REPOLENS_INSTALL_DIR="$HOME/.local/bin" sh install/install.sh
 ```
 
 ## Quick Start
