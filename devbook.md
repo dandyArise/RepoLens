@@ -432,6 +432,8 @@ Bench contre :
 
 - [x] Installer Windows `install.ps1`.
 - [x] Installer Linux/macOS `install.sh`.
+- [x] Option auto-init install.
+- [x] Installers inclus dans archives release.
 - [x] Checksums SHA256.
 - [x] Archives zip/tar.gz.
 - [x] Auto-config Codex.
@@ -448,5 +450,5 @@ Ordre recommandé :
 1. Ajouter build perf large repo.
 2. Ajouter plus de langages.
 3. Ajouter polish UI.
-4. Ajouter packaging install avec auto-init.
-5. Ajouter CI cache Rust.
+4. Ajouter CI cache Rust.
+5. Ajouter uninstall/update helpers.

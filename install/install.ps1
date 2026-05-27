@@ -1,7 +1,11 @@
 param(
     [string]$Version = "latest",
     [string]$InstallDir = "$env:USERPROFILE\bin",
-    [string]$Repo = "dandyArise/RepoLens"
+    [string]$Repo = "dandyArise/RepoLens",
+    [switch]$Init,
+    [ValidateSet("all", "codex", "claude", "cursor")]
+    [string]$InitTarget = "all",
+    [string]$InitRoot = (Get-Location).Path
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,11 +60,18 @@ try {
     }
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-    Copy-Item -Path $exe.FullName -Destination (Join-Path $InstallDir "repolens.exe") -Force
+    $installedExe = Join-Path $InstallDir "repolens.exe"
+    Copy-Item -Path $exe.FullName -Destination $installedExe -Force
 
     Write-Host "Installed repolens to $InstallDir"
     Write-Host "Add this directory to PATH if needed:"
     Write-Host "  $InstallDir"
+
+    if ($Init) {
+        Write-Host "Configuring MCP target '$InitTarget' for repo root:"
+        Write-Host "  $InitRoot"
+        & $installedExe init --target $InitTarget $InitRoot
+    }
 }
 finally {
     Remove-Item -Recurse -Force -LiteralPath $tmp -ErrorAction SilentlyContinue

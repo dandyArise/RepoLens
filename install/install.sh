@@ -4,6 +4,9 @@ set -eu
 REPO="${REPOLENS_REPO:-dandyArise/RepoLens}"
 VERSION="${REPOLENS_VERSION:-latest}"
 INSTALL_DIR="${REPOLENS_INSTALL_DIR:-$HOME/.local/bin}"
+INIT="${REPOLENS_INIT:-0}"
+INIT_TARGET="${REPOLENS_INIT_TARGET:-all}"
+INIT_ROOT="${REPOLENS_INIT_ROOT:-$(pwd)}"
 
 need() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -83,3 +86,13 @@ chmod +x "$INSTALL_DIR/repolens"
 echo "Installed repolens to $INSTALL_DIR"
 echo "Add this directory to PATH if needed:"
 echo "  $INSTALL_DIR"
+
+if [ "$INIT" = "1" ] || [ "$INIT" = "true" ]; then
+  case "$INIT_TARGET" in
+    all|codex|claude|cursor) ;;
+    *) echo "invalid REPOLENS_INIT_TARGET: $INIT_TARGET" >&2; exit 1 ;;
+  esac
+  echo "Configuring MCP target '$INIT_TARGET' for repo root:"
+  echo "  $INIT_ROOT"
+  "$INSTALL_DIR/repolens" init --target "$INIT_TARGET" "$INIT_ROOT"
+fi

@@ -100,10 +100,12 @@ Installer options:
 
 ```powershell
 .\install\install.ps1 -Version v0.1.0 -InstallDir "$env:USERPROFILE\bin"
+.\install\install.ps1 -Init -InitTarget codex -InitRoot "C:\Users\dandy\Documents\Github\RepoLens"
 ```
 
 ```sh
 REPOLENS_VERSION=v0.1.0 REPOLENS_INSTALL_DIR="$HOME/.local/bin" sh install/install.sh
+REPOLENS_INIT=1 REPOLENS_INIT_TARGET=codex REPOLENS_INIT_ROOT="$PWD" sh install/install.sh
 ```
 
 After install, make sure the install directory is in `PATH`, then run:

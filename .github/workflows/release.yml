@@ -53,6 +53,8 @@ jobs:
           mkdir -p "dist/${{ matrix.asset }}"
           cp "target/release/${{ matrix.binary }}" "dist/${{ matrix.asset }}/"
           cp README.md "dist/${{ matrix.asset }}/"
+          mkdir -p "dist/${{ matrix.asset }}/install"
+          cp install/install.* "dist/${{ matrix.asset }}/install/"
           if compgen -G "LICENSE*" > /dev/null; then
             cp LICENSE* "dist/${{ matrix.asset }}/"
           fi
