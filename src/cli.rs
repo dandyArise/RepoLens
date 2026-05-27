@@ -96,6 +96,12 @@ pub enum Command {
         #[arg(long)]
         hash: String,
     },
+    Init {
+        #[arg(long, value_enum, default_value_t = InitTargetArg::All)]
+        target: InitTargetArg,
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -103,4 +109,12 @@ pub enum EditOpArg {
     Replace,
     Insert,
     Delete,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+pub enum InitTargetArg {
+    All,
+    Codex,
+    Claude,
+    Cursor,
 }

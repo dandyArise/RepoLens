@@ -4,6 +4,7 @@ mod config;
 mod deps;
 mod edit;
 mod index;
+mod init;
 mod mcp;
 mod pathing;
 mod read;
@@ -95,6 +96,9 @@ fn main() -> Result<()> {
             println!("path: {}", result.path);
             println!("hash: {}", result.hash);
             println!("lines: {}", result.lines);
+        }
+        Command::Init { target, root } => {
+            init::run(target, &root)?;
         }
     }
 

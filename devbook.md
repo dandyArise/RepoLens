@@ -418,9 +418,9 @@ Bench contre :
 - [x] Installer Linux/macOS `install.sh`.
 - [x] Checksums SHA256.
 - [x] Archives zip/tar.gz.
-- [ ] Auto-config Codex.
-- [ ] Auto-config Claude.
-- [ ] Auto-config Cursor.
+- [x] Auto-config Codex.
+- [x] Auto-config Claude.
+- [x] Auto-config Cursor.
 - [ ] Documentation installation.
 
 ## Prochaine Étape
@@ -429,8 +429,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter `repolens init` pour auto-config MCP.
-2. Ajouter résolution TS/JS relative.
-3. Ajouter watcher incrémental.
-4. Ajouter HTTP local.
-5. Ajouter Linux arm64 release.
+1. Ajouter résolution TS/JS relative.
+2. Ajouter watcher incrémental.
+3. Ajouter HTTP local.
+4. Ajouter Linux arm64 release.
+5. Ajouter reverse deps.

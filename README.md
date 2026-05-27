@@ -250,6 +250,31 @@ Starts the MCP stdio server.
 repolens mcp .
 ```
 
+### `init`
+
+Writes MCP configuration for supported clients.
+
+```powershell
+repolens init . --target all
+repolens init . --target codex
+repolens init . --target claude
+repolens init . --target cursor
+```
+
+Current targets:
+
+- Codex: `~/.codex/config.toml`
+- Claude Desktop:
+  - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+  - macOS/Linux fallback: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Cursor: `~/.cursor/mcp.json`
+
+`init` registers the current `repolens` executable with:
+
+```text
+repolens mcp <repo-root>
+```
+
 ## MCP Tools
 
 Implemented tools:
@@ -353,7 +378,6 @@ Next planned work:
 
 - TS/JS relative dependency resolution.
 - Release workflow with Windows/Linux/macOS binaries.
-- PowerShell and shell installers.
 - Watcher and incremental reindex.
 - HTTP localhost server.
 
@@ -363,4 +387,4 @@ Longer term:
 - Reverse dependency graph.
 - Faster binary snapshots.
 - Parallel indexing.
-- MCP auto-config for Codex/Claude/Cursor.
+- More robust MCP auto-config variants.
