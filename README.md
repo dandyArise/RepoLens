@@ -16,8 +16,8 @@ Implemented today:
 - Snapshot metadata command/tool.
 - Word and trigram indexes for search.
 - Parallel file indexing.
-- Symbol extraction with tree-sitter for Rust, TypeScript, JavaScript, TSX/JSX, Python, Go, and PHP.
-- Import/dependency extraction for Rust, TS/JS, Python, Go, and PHP.
+- Symbol extraction for Rust, TypeScript, JavaScript, TSX/JSX, Python, Go, PHP, Java, C#, C/C++, Ruby, JSON, YAML, and TOML.
+- Import/dependency extraction for Rust, TS/JS, Python, Go, PHP, Java, C#, C/C++, and Ruby.
 - Relative TS/JS dependency resolution.
 - Forward and reverse dependency graph for resolved imports.
 - MCP stdio server with compact tools.
@@ -214,6 +214,13 @@ Supported symbol languages:
 - JavaScript
 - TSX/JSX
 - Python
+- Go
+- PHP
+- Java
+- C#
+- C/C++
+- Ruby
+- JSON/TOML/YAML keys
 
 ### `symbol`
 
@@ -242,6 +249,10 @@ Currently extracts:
 - Python: `import`, `from ... import`
 - Go: `import`
 - PHP: `use`, `require`, `include`
+- Java: `import`
+- C#: `using`
+- C/C++: `#include`
+- Ruby: `require`, `require_relative`
 
 ### `bench`
 
@@ -467,5 +478,4 @@ Next planned work:
 
 Longer term:
 
-- More languages.
 - More robust MCP auto-config variants.

@@ -213,6 +213,16 @@ fn extract_symbols(id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Vec<Sym
         Some("py") | Some("pyw") => symbols::extract_python_symbols(id, path, text),
         Some("go") => symbols::extract_go_symbols(id, path, text),
         Some("php") => symbols::extract_php_symbols(id, path, text),
+        Some("java") => symbols::extract_java_symbols(id, path, text),
+        Some("cs") => symbols::extract_c_sharp_symbols(id, path, text),
+        Some("c") | Some("h") => symbols::extract_c_symbols(id, path, text),
+        Some("cc") | Some("cpp") | Some("cxx") | Some("hpp") | Some("hh") | Some("hxx") => {
+            symbols::extract_cpp_symbols(id, path, text)
+        }
+        Some("rb") => symbols::extract_ruby_symbols(id, path, text),
+        Some("json") => symbols::extract_json_symbols(id, path, text),
+        Some("toml") => symbols::extract_toml_symbols(id, path, text),
+        Some("yml") | Some("yaml") => Ok(symbols::extract_yaml_symbols(id, path, text)),
         _ => Ok(Vec::new()),
     }
 }
@@ -261,6 +271,11 @@ fn extract_deps(id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Option<Fil
         Some("py") | Some("pyw") => deps::extract_python_deps(id, path, text).map(Some),
         Some("go") => deps::extract_go_deps(id, path, text).map(Some),
         Some("php") => deps::extract_php_deps(id, path, text).map(Some),
+        Some("java") => deps::extract_java_deps(id, path, text).map(Some),
+        Some("cs") => deps::extract_c_sharp_deps(id, path, text).map(Some),
+        Some("c") | Some("h") | Some("cc") | Some("cpp") | Some("cxx") | Some("hpp")
+        | Some("hh") | Some("hxx") => deps::extract_c_like_deps(id, path, text).map(Some),
+        Some("rb") => deps::extract_ruby_deps(id, path, text).map(Some),
         _ => Ok(None),
     }
 }

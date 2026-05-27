@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tree_sitter::{Node, Parser};
 
 use crate::index::{FileId, ProjectIndex};
@@ -31,6 +32,7 @@ pub enum SymbolKind {
     Const,
     Module,
     Variable,
+    Key,
 }
 
 pub fn extract_rust_symbols(
@@ -151,6 +153,105 @@ pub fn extract_php_symbols(file_id: FileId, path: &Utf8PathBuf, text: &str) -> R
         &mut symbols,
     );
     Ok(symbols)
+}
+
+pub fn extract_java_symbols(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    text: &str,
+) -> Result<Vec<Symbol>> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_java::LANGUAGE.into())
+        .context("failed to load Java tree-sitter grammar")?;
+    extract_generic_symbols(file_id, path, text, parser, java_symbol_from_node)
+}
+
+pub fn extract_c_sharp_symbols(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    text: &str,
+) -> Result<Vec<Symbol>> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
+        .context("failed to load C# tree-sitter grammar")?;
+    extract_generic_symbols(file_id, path, text, parser, c_sharp_symbol_from_node)
+}
+
+pub fn extract_c_symbols(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Vec<Symbol>> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_c::LANGUAGE.into())
+        .context("failed to load C tree-sitter grammar")?;
+    extract_generic_symbols(file_id, path, text, parser, c_cpp_symbol_from_node)
+}
+
+pub fn extract_cpp_symbols(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Vec<Symbol>> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_cpp::LANGUAGE.into())
+        .context("failed to load C++ tree-sitter grammar")?;
+    extract_generic_symbols(file_id, path, text, parser, c_cpp_symbol_from_node)
+}
+
+pub fn extract_ruby_symbols(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    text: &str,
+) -> Result<Vec<Symbol>> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_ruby::LANGUAGE.into())
+        .context("failed to load Ruby tree-sitter grammar")?;
+    extract_generic_symbols(file_id, path, text, parser, ruby_symbol_from_node)
+}
+
+pub fn extract_json_symbols(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    text: &str,
+) -> Result<Vec<Symbol>> {
+    let value: Value = serde_json::from_str(text).context("failed to parse JSON")?;
+    let mut symbols = Vec::new();
+    collect_json_keys(file_id, path, "", &value, &mut symbols);
+    Ok(symbols)
+}
+
+pub fn extract_toml_symbols(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    text: &str,
+) -> Result<Vec<Symbol>> {
+    let value: toml::Value = toml::from_str(text).context("failed to parse TOML")?;
+    let mut symbols = Vec::new();
+    collect_toml_keys(file_id, path, "", &value, &mut symbols);
+    Ok(symbols)
+}
+
+pub fn extract_yaml_symbols(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Vec<Symbol> {
+    text.lines()
+        .enumerate()
+        .filter_map(|(idx, line)| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with('#') || !trimmed.contains(':') {
+                return None;
+            }
+            let key = trimmed.split_once(':')?.0.trim();
+            if key.is_empty() || key.starts_with('-') {
+                return None;
+            }
+            Some(Symbol {
+                name: key.to_string(),
+                kind: SymbolKind::Key,
+                file_id,
+                path: path.clone(),
+                line: idx + 1,
+                column: line.len() - trimmed.len() + 1,
+                end_line: idx + 1,
+            })
+        })
+        .collect()
 }
 
 fn extract_ts_like_symbols(
@@ -310,6 +411,45 @@ fn walk_php(
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         walk_php(child, source, file_id, path, symbols);
+    }
+}
+
+fn extract_generic_symbols(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    text: &str,
+    mut parser: Parser,
+    symbol_fn: fn(Node, &[u8], FileId, &Utf8PathBuf) -> Option<Symbol>,
+) -> Result<Vec<Symbol>> {
+    let tree = parser
+        .parse(text, None)
+        .ok_or_else(|| anyhow::anyhow!("failed to parse file"))?;
+    let mut symbols = Vec::new();
+    walk_generic(
+        tree.root_node(),
+        text.as_bytes(),
+        file_id,
+        path,
+        &mut symbols,
+        symbol_fn,
+    );
+    Ok(symbols)
+}
+
+fn walk_generic(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    symbols: &mut Vec<Symbol>,
+    symbol_fn: fn(Node, &[u8], FileId, &Utf8PathBuf) -> Option<Symbol>,
+) {
+    if let Some(symbol) = symbol_fn(node, source, file_id, path) {
+        symbols.push(symbol);
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_generic(child, source, file_id, path, symbols, symbol_fn);
     }
 }
 
@@ -609,6 +749,184 @@ fn php_symbol_from_node(
     })
 }
 
+fn java_symbol_from_node(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+) -> Option<Symbol> {
+    let kind = match node.kind() {
+        "class_declaration" => SymbolKind::Class,
+        "interface_declaration" => SymbolKind::Interface,
+        "enum_declaration" => SymbolKind::Enum,
+        "method_declaration" | "constructor_declaration" => SymbolKind::Method,
+        "field_declaration" => SymbolKind::Variable,
+        _ => return None,
+    };
+    named_symbol(node, source, file_id, path, kind)
+}
+
+fn c_sharp_symbol_from_node(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+) -> Option<Symbol> {
+    let kind = match node.kind() {
+        "class_declaration" => SymbolKind::Class,
+        "interface_declaration" => SymbolKind::Interface,
+        "enum_declaration" => SymbolKind::Enum,
+        "struct_declaration" => SymbolKind::Struct,
+        "method_declaration" | "constructor_declaration" => SymbolKind::Method,
+        "property_declaration" | "field_declaration" => SymbolKind::Variable,
+        _ => return None,
+    };
+    named_symbol(node, source, file_id, path, kind)
+}
+
+fn c_cpp_symbol_from_node(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+) -> Option<Symbol> {
+    let kind = match node.kind() {
+        "function_definition" => SymbolKind::Function,
+        "struct_specifier" => SymbolKind::Struct,
+        "class_specifier" => SymbolKind::Class,
+        "enum_specifier" => SymbolKind::Enum,
+        "type_definition" | "alias_declaration" => SymbolKind::Type,
+        _ => return None,
+    };
+    let name = node
+        .child_by_field_name("name")
+        .and_then(|name| name.utf8_text(source).ok().map(str::to_string))
+        .or_else(|| first_identifier(node, source))?;
+    Some(make_symbol(node, file_id, path, kind, name))
+}
+
+fn ruby_symbol_from_node(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+) -> Option<Symbol> {
+    let kind = match node.kind() {
+        "class" => SymbolKind::Class,
+        "module" => SymbolKind::Module,
+        "method" | "singleton_method" => SymbolKind::Function,
+        "assignment" => SymbolKind::Variable,
+        _ => return None,
+    };
+    named_symbol(node, source, file_id, path, kind.clone()).or_else(|| {
+        first_identifier(node, source).map(|name| make_symbol(node, file_id, path, kind, name))
+    })
+}
+
+fn named_symbol(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    kind: SymbolKind,
+) -> Option<Symbol> {
+    let name = node
+        .child_by_field_name("name")?
+        .utf8_text(source)
+        .ok()?
+        .trim_start_matches('$')
+        .to_string();
+    Some(make_symbol(node, file_id, path, kind, name))
+}
+
+fn make_symbol(
+    node: Node,
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    kind: SymbolKind,
+    name: String,
+) -> Symbol {
+    let start = node.start_position();
+    let end = node.end_position();
+    Symbol {
+        name,
+        kind,
+        file_id,
+        path: path.clone(),
+        line: start.row + 1,
+        column: start.column + 1,
+        end_line: end.row + 1,
+    }
+}
+
+fn first_identifier(node: Node, source: &[u8]) -> Option<String> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if matches!(
+            child.kind(),
+            "identifier" | "type_identifier" | "field_identifier" | "constant"
+        ) {
+            return child.utf8_text(source).ok().map(str::to_string);
+        }
+        if let Some(found) = first_identifier(child, source) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn collect_json_keys(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    prefix: &str,
+    value: &Value,
+    symbols: &mut Vec<Symbol>,
+) {
+    if let Value::Object(map) = value {
+        for (key, value) in map {
+            let name = if prefix.is_empty() {
+                key.to_string()
+            } else {
+                format!("{prefix}.{key}")
+            };
+            symbols.push(config_symbol(file_id, path, name.clone()));
+            collect_json_keys(file_id, path, &name, value, symbols);
+        }
+    }
+}
+
+fn collect_toml_keys(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    prefix: &str,
+    value: &toml::Value,
+    symbols: &mut Vec<Symbol>,
+) {
+    if let toml::Value::Table(map) = value {
+        for (key, value) in map {
+            let name = if prefix.is_empty() {
+                key.to_string()
+            } else {
+                format!("{prefix}.{key}")
+            };
+            symbols.push(config_symbol(file_id, path, name.clone()));
+            collect_toml_keys(file_id, path, &name, value, symbols);
+        }
+    }
+}
+
+fn config_symbol(file_id: FileId, path: &Utf8PathBuf, name: String) -> Symbol {
+    Symbol {
+        name,
+        kind: SymbolKind::Key,
+        file_id,
+        path: path.clone(),
+        line: 1,
+        column: 1,
+        end_line: 1,
+    }
+}
+
 fn impl_name(node: Node, source: &[u8]) -> Option<String> {
     let mut cursor = node.walk();
     let mut parts = Vec::new();
@@ -632,8 +950,10 @@ mod tests {
     use camino::Utf8PathBuf;
 
     use super::{
-        SymbolKind, extract_go_symbols, extract_php_symbols, extract_python_symbols,
-        extract_rust_symbols, extract_typescript_symbols,
+        SymbolKind, extract_c_sharp_symbols, extract_c_symbols, extract_cpp_symbols,
+        extract_go_symbols, extract_java_symbols, extract_json_symbols, extract_php_symbols,
+        extract_python_symbols, extract_ruby_symbols, extract_rust_symbols, extract_toml_symbols,
+        extract_typescript_symbols, extract_yaml_symbols,
     };
 
     #[test]
@@ -804,5 +1124,77 @@ function make_user() {}
                 .iter()
                 .any(|s| s.name == "make_user" && s.kind == SymbolKind::Function)
         );
+    }
+
+    #[test]
+    fn extracts_java_symbols() {
+        let text = "package app; import java.util.List; class Service { void run() {} } interface Contract {}";
+        let symbols = extract_java_symbols(0, &Utf8PathBuf::from("Service.java"), text).unwrap();
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Service" && s.kind == SymbolKind::Class)
+        );
+        assert!(symbols.iter().any(|s| s.name == "run"));
+    }
+
+    #[test]
+    fn extracts_c_sharp_symbols() {
+        let text = "using System; class Service { void Run() {} } interface IRun {}";
+        let symbols = extract_c_sharp_symbols(0, &Utf8PathBuf::from("Service.cs"), text).unwrap();
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Service" && s.kind == SymbolKind::Class)
+        );
+        assert!(symbols.iter().any(|s| s.name == "Run"));
+    }
+
+    #[test]
+    fn extracts_c_and_cpp_symbols() {
+        let c_symbols = extract_c_symbols(
+            0,
+            &Utf8PathBuf::from("main.c"),
+            "#include <stdio.h>\nstruct User { int id; };\nint run() { return 1; }\n",
+        )
+        .unwrap();
+        let cpp_symbols = extract_cpp_symbols(
+            0,
+            &Utf8PathBuf::from("main.cpp"),
+            "#include <vector>\nclass Service { void run() {} };\nint main() { return 0; }\n",
+        )
+        .unwrap();
+        assert!(c_symbols.iter().any(|s| s.name == "run"));
+        assert!(cpp_symbols.iter().any(|s| s.name == "Service"));
+    }
+
+    #[test]
+    fn extracts_ruby_symbols() {
+        let text = "require 'json'\nmodule App\nclass Service\n def run\n end\nend\nend\n";
+        let symbols = extract_ruby_symbols(0, &Utf8PathBuf::from("app.rb"), text).unwrap();
+        assert!(symbols.iter().any(|s| s.name == "App"));
+        assert!(symbols.iter().any(|s| s.name == "Service"));
+        assert!(symbols.iter().any(|s| s.name == "run"));
+    }
+
+    #[test]
+    fn extracts_config_symbols() {
+        let json = extract_json_symbols(
+            0,
+            &Utf8PathBuf::from("package.json"),
+            r#"{"scripts":{"test":"x"}}"#,
+        )
+        .unwrap();
+        let toml =
+            extract_toml_symbols(0, &Utf8PathBuf::from("Cargo.toml"), "[package]\nname='x'\n")
+                .unwrap();
+        let yaml = extract_yaml_symbols(
+            0,
+            &Utf8PathBuf::from("config.yml"),
+            "name: app\nnested:\n  value: 1\n",
+        );
+        assert!(json.iter().any(|s| s.name == "scripts.test"));
+        assert!(toml.iter().any(|s| s.name == "package.name"));
+        assert!(yaml.iter().any(|s| s.name == "name"));
     }
 }

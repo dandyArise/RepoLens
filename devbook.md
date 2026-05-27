@@ -39,7 +39,7 @@ Crates de base :
 - `rayon` : indexation parallèle.
 - `roaring` : bitmaps rapides.
 - `memmap2` : mmap snapshot/index.
-- `tree-sitter` : symboles. Rust, TypeScript, JavaScript, TSX, Python, Go et PHP sont branchés.
+- `tree-sitter` : symboles. Rust, TypeScript, JavaScript, TSX, Python, Go, PHP, Java, C#, C/C++ et Ruby sont branchés. JSON/TOML/YAML exposent des clés.
 - `notify` : watcher.
 - `tokio`, `axum` : HTTP local.
 - `ropey` : édition texte.
@@ -344,6 +344,11 @@ Bench contre :
 - [x] Parser Python.
 - [x] Parser Go.
 - [x] Parser PHP.
+- [x] Parser Java.
+- [x] Parser C#.
+- [x] Parser C/C++.
+- [x] Parser Ruby.
+- [x] Symboles JSON/TOML/YAML.
 - [x] Parser TSX.
 - [x] Commande `outline`.
 - [x] Commande `symbol`.
@@ -358,6 +363,10 @@ Bench contre :
 - [x] Résolution Python best-effort.
 - [x] Résolution Go best-effort.
 - [x] Résolution PHP best-effort.
+- [x] Résolution Java best-effort.
+- [x] Résolution C# best-effort.
+- [x] Résolution C/C++ best-effort.
+- [x] Résolution Ruby best-effort.
 - [x] `deps_forward`.
 - [x] `deps_reverse`.
 - [x] Commande `deps`.
@@ -449,7 +458,7 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 Ordre recommandé :
 
 1. Ajouter build perf large repo.
-2. Ajouter plus de langages.
-3. Ajouter polish UI.
-4. Ajouter CI cache Rust.
-5. Ajouter installer tests CI.
+2. Ajouter polish UI.
+3. Ajouter CI cache Rust.
+4. Ajouter installer tests CI.
+5. Ajouter langages restants via strategy compatible.

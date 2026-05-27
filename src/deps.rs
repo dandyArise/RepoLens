@@ -37,6 +37,10 @@ pub enum ImportKind {
     GoImport,
     PhpUse,
     PhpRequire,
+    JavaImport,
+    CInclude,
+    CSharpUsing,
+    RubyRequire,
 }
 
 pub fn print_deps(index: &ProjectIndex, path: &Utf8PathBuf) {
@@ -224,6 +228,77 @@ pub fn extract_php_deps(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Resu
     })
 }
 
+pub fn extract_java_deps(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<FileDeps> {
+    Ok(line_deps(
+        file_id,
+        path,
+        text,
+        ImportKind::JavaImport,
+        |line| {
+            Some(
+                line.trim()
+                    .strip_prefix("import ")?
+                    .trim_end_matches(';')
+                    .trim()
+                    .to_string(),
+            )
+        },
+    ))
+}
+
+pub fn extract_c_like_deps(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<FileDeps> {
+    Ok(line_deps(
+        file_id,
+        path,
+        text,
+        ImportKind::CInclude,
+        |line| {
+            let line = line.trim();
+            let rest = line.strip_prefix("#include")?.trim();
+            Some(
+                rest.trim_matches('<')
+                    .trim_matches('>')
+                    .trim_matches('"')
+                    .to_string(),
+            )
+        },
+    ))
+}
+
+pub fn extract_c_sharp_deps(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<FileDeps> {
+    Ok(line_deps(
+        file_id,
+        path,
+        text,
+        ImportKind::CSharpUsing,
+        |line| {
+            Some(
+                line.trim()
+                    .strip_prefix("using ")?
+                    .trim_end_matches(';')
+                    .trim()
+                    .to_string(),
+            )
+        },
+    ))
+}
+
+pub fn extract_ruby_deps(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<FileDeps> {
+    Ok(line_deps(
+        file_id,
+        path,
+        text,
+        ImportKind::RubyRequire,
+        |line| {
+            let line = line.trim();
+            let rest = line
+                .strip_prefix("require_relative ")
+                .or_else(|| line.strip_prefix("require "))?;
+            Some(clean_string(rest.trim()))
+        },
+    ))
+}
+
 fn walk_rust_deps(node: Node, source: &[u8], imports: &mut Vec<ImportRef>) {
     match node.kind() {
         "use_declaration" => {
@@ -348,6 +423,34 @@ fn import(node: Node, module: String, kind: ImportKind) -> ImportRef {
     }
 }
 
+fn line_deps(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    text: &str,
+    kind: ImportKind,
+    parse: fn(&str) -> Option<String>,
+) -> FileDeps {
+    let imports = text
+        .lines()
+        .enumerate()
+        .filter_map(|(idx, line)| {
+            let module = parse(line)?;
+            Some(ImportRef {
+                module,
+                line: idx + 1,
+                kind: kind.clone(),
+                resolved_path: None,
+                resolved_file_id: None,
+            })
+        })
+        .collect();
+    FileDeps {
+        file_id,
+        path: path.clone(),
+        imports,
+    }
+}
+
 fn is_relative_specifier(module: &str) -> bool {
     module.starts_with("./") || module.starts_with("../")
 }
@@ -462,9 +565,9 @@ mod tests {
     use crate::index::FileEntry;
 
     use super::{
-        FileDeps, ImportKind, ImportRef, build_graph, extract_go_deps, extract_php_deps,
-        extract_python_deps, extract_rust_deps, extract_ts_like_deps,
-        resolve_relative_ts_js_imports,
+        FileDeps, ImportKind, ImportRef, build_graph, extract_c_like_deps, extract_c_sharp_deps,
+        extract_go_deps, extract_java_deps, extract_php_deps, extract_python_deps,
+        extract_ruby_deps, extract_rust_deps, extract_ts_like_deps, resolve_relative_ts_js_imports,
     };
 
     #[test]
@@ -550,6 +653,41 @@ mod tests {
                 .iter()
                 .any(|i| i.module == "vendor/autoload.php")
         );
+    }
+
+    #[test]
+    fn extracts_java_csharp_c_and_ruby_deps() {
+        let java = extract_java_deps(
+            0,
+            &Utf8PathBuf::from("Service.java"),
+            "import java.util.List;\nclass Service {}\n",
+        )
+        .unwrap();
+        let cs = extract_c_sharp_deps(
+            1,
+            &Utf8PathBuf::from("Service.cs"),
+            "using System.Text;\nclass Service {}\n",
+        )
+        .unwrap();
+        let c = extract_c_like_deps(
+            2,
+            &Utf8PathBuf::from("main.c"),
+            "#include <stdio.h>\n#include \"app.h\"\n",
+        )
+        .unwrap();
+        let rb = extract_ruby_deps(
+            3,
+            &Utf8PathBuf::from("app.rb"),
+            "require 'json'\nrequire_relative './user'\n",
+        )
+        .unwrap();
+
+        assert!(java.imports.iter().any(|i| i.module == "java.util.List"));
+        assert!(cs.imports.iter().any(|i| i.module == "System.Text"));
+        assert!(c.imports.iter().any(|i| i.module == "stdio.h"));
+        assert!(c.imports.iter().any(|i| i.module == "app.h"));
+        assert!(rb.imports.iter().any(|i| i.module == "json"));
+        assert!(rb.imports.iter().any(|i| i.module == "./user"));
     }
 
     #[test]
