@@ -7,7 +7,7 @@ RepoLens scans a repository, builds compact local indexes, and exposes code navi
 ## Links
 
 - 🚀 [Latest release](https://github.com/dandyArise/RepoLens/releases/latest)
-- 📦 [v0.1.1 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.1)
+- 📦 [v0.1.2 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.2)
 - ⚙️ [GitHub Actions builds](https://github.com/dandyArise/RepoLens/actions)
 - 🧩 [Windows installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.ps1)
 - 🧩 [Linux/macOS installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.sh)
@@ -52,9 +52,9 @@ Not implemented yet:
 
 - perf report for large repositories.
 
-## Install From Release 📦
+## Global Install 📦
 
-Download binaries from [GitHub Releases](https://github.com/dandyArise/RepoLens/releases/latest).
+Install RepoLens once, then enable it only in the projects where you want to use it.
 
 Windows PowerShell:
 
@@ -71,37 +71,48 @@ curl -fsSL https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/in
 Defaults:
 
 - Windows installs to `%USERPROFILE%\bin`
+- Windows adds `%USERPROFILE%\bin` to the user `PATH`
 - Linux/macOS installs to `$HOME/.local/bin`
 - checksums are verified before copying the binary
 - supported assets: Windows x86_64, Linux x86_64/arm64, macOS x86_64/arm64
 
-Installer options:
+Then open a project folder and activate RepoLens for your AI client:
 
 ```powershell
-.\install\install.ps1 -Version v0.1.1 -InstallDir "$env:USERPROFILE\bin"
-.\install\install.ps1 -Init -InitTarget codex -InitRoot "$PWD"
+repolens init . --target codex
+```
+
+Here `.` means the current project folder. You can run the same command in any other repository when you want RepoLens there too.
+
+Use all supported clients:
+
+```powershell
+repolens init . --target all
+```
+
+Check or disable later:
+
+```powershell
+repolens mcp-status --target all
+repolens disable --target codex
+```
+
+## Installer Options
+
+```powershell
+.\install\install.ps1 -Version v0.1.2
 .\install\install.ps1 -Action update
-.\install\install.ps1 -Action enable -InitTarget codex -InitRoot "$PWD"
 .\install\install.ps1 -Action status -InitTarget all
 .\install\install.ps1 -Action disable -InitTarget codex
 .\install\install.ps1 -Action uninstall
 ```
 
 ```sh
-REPOLENS_VERSION=v0.1.1 REPOLENS_INSTALL_DIR="$HOME/.local/bin" sh install/install.sh
-REPOLENS_INIT=1 REPOLENS_INIT_TARGET=codex REPOLENS_INIT_ROOT="$PWD" sh install/install.sh
+REPOLENS_VERSION=v0.1.2 sh install/install.sh
 REPOLENS_ACTION=update sh install/install.sh
-REPOLENS_ACTION=enable REPOLENS_INIT_TARGET=codex REPOLENS_INIT_ROOT="$PWD" sh install/install.sh
 REPOLENS_ACTION=status REPOLENS_INIT_TARGET=all sh install/install.sh
 REPOLENS_ACTION=disable REPOLENS_INIT_TARGET=codex sh install/install.sh
 REPOLENS_ACTION=uninstall sh install/install.sh
-```
-
-After install, make sure the install directory is in `PATH`, then run:
-
-```powershell
-repolens --help
-repolens init . --target codex
 ```
 
 ## Use With AI Agents 🤖
@@ -114,10 +125,9 @@ From the repository you want to index:
 repolens init . --target all
 ```
 
-`init` and `enable` both register RepoLens for a repository. Configure one client only:
+Configure one client only:
 
 ```powershell
-repolens enable . --target codex
 repolens init . --target codex
 repolens init . --target claude
 repolens init . --target cursor
@@ -187,8 +197,8 @@ Published assets are available on the [latest release page](https://github.com/d
 To create a release:
 
 ```powershell
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
 During development:

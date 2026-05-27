@@ -125,6 +125,10 @@ else
 fi
 echo "Add this directory to PATH if needed:"
 echo "  $INSTALL_DIR"
+echo
+echo "RepoLens is installed globally."
+echo "To activate it for a project, open that project folder and run:"
+echo "  repolens init . --target codex"
 
 if [ "$INIT" = "1" ] || [ "$INIT" = "true" ]; then
   case "$INIT_TARGET" in

@@ -14,6 +14,47 @@ $ErrorActionPreference = "Stop"
 
 $installedExe = Join-Path $InstallDir "repolens.exe"
 
+function Normalize-PathEntry {
+    param([string]$PathEntry)
+
+    try {
+        return [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($PathEntry)).TrimEnd('\')
+    }
+    catch {
+        return $PathEntry.TrimEnd('\')
+    }
+}
+
+function Add-ToUserPath {
+    param([string]$Dir)
+
+    $fullDir = Normalize-PathEntry -PathEntry $Dir
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $entries = @()
+    if ($userPath) {
+        $entries = $userPath -split ";" | Where-Object { $_ -ne "" }
+    }
+
+    $alreadyInUserPath = $entries | Where-Object {
+        (Normalize-PathEntry -PathEntry $_).Equals($fullDir, [System.StringComparison]::OrdinalIgnoreCase)
+    } | Select-Object -First 1
+
+    if (-not $alreadyInUserPath) {
+        $nextPath = if ($userPath) { "$userPath;$fullDir" } else { $fullDir }
+        [Environment]::SetEnvironmentVariable("Path", $nextPath, "User")
+        Write-Host "Added to user PATH: $fullDir"
+    }
+
+    $currentEntries = $env:Path -split ";" | Where-Object { $_ -ne "" }
+    $alreadyInCurrentPath = $currentEntries | Where-Object {
+        (Normalize-PathEntry -PathEntry $_).Equals($fullDir, [System.StringComparison]::OrdinalIgnoreCase)
+    } | Select-Object -First 1
+
+    if (-not $alreadyInCurrentPath) {
+        $env:Path = "$env:Path;$fullDir"
+    }
+}
+
 if ($Action -eq "uninstall") {
     if (Test-Path -LiteralPath $installedExe) {
         Remove-Item -LiteralPath $installedExe -Force
@@ -93,6 +134,7 @@ try {
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     Copy-Item -Path $exe.FullName -Destination $installedExe -Force
+    Add-ToUserPath -Dir $InstallDir
 
     if ($Action -eq "update") {
         Write-Host "Updated repolens in $InstallDir"
@@ -100,8 +142,10 @@ try {
     else {
         Write-Host "Installed repolens to $InstallDir"
     }
-    Write-Host "Add this directory to PATH if needed:"
-    Write-Host "  $InstallDir"
+    Write-Host ""
+    Write-Host "RepoLens is installed globally."
+    Write-Host "To activate it for a project, open that project folder and run:"
+    Write-Host "  repolens init . --target codex"
 
     if ($Init) {
         Write-Host "Configuring MCP target '$InitTarget' for repo root:"
