@@ -444,7 +444,7 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 Ordre recommandé :
 
 1. Ajouter build perf large repo.
-2. Ajouter snapshots mmap.
-3. Ajouter plus de langages.
-4. Ajouter polish UI.
-5. Ajouter perf report dans `bench`.
+2. Ajouter plus de langages.
+3. Ajouter polish UI.
+4. Ajouter perf report dans `bench`.
+5. Ajouter packaging install avec auto-init.

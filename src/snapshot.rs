@@ -1,8 +1,10 @@
 use std::fs;
+use std::fs::File;
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use memmap2::MmapOptions;
 use serde::Serialize;
 
 use crate::index::ProjectIndex;
@@ -25,9 +27,9 @@ pub struct SnapshotInfo {
 pub fn load_or_build(root: &Path) -> Result<ProjectIndex> {
     let root = canonical_utf8(root)?;
     let binary_path = binary_index_path(&root);
-    if let Ok(bytes) = fs::read(&binary_path)
+    if let Ok(bytes) = mmap_file(&binary_path)
         && let Ok((index, _)) =
-            bincode::serde::decode_from_slice(&bytes, bincode::config::standard())
+            bincode::serde::decode_from_slice(bytes.as_ref(), bincode::config::standard())
     {
         return Ok(index);
     }
@@ -37,6 +39,12 @@ pub fn load_or_build(root: &Path) -> Result<ProjectIndex> {
         Ok(raw) => serde_json::from_str(&raw).or_else(|_| ProjectIndex::build(root.as_std_path())),
         Err(_) => ProjectIndex::build(root.as_std_path()),
     }
+}
+
+fn mmap_file(path: &Utf8Path) -> Result<memmap2::Mmap> {
+    let file = File::open(path).with_context(|| format!("failed to open {path}"))?;
+    // The map is read-only and the file handle is not exposed for mutation.
+    unsafe { MmapOptions::new().map(&file) }.with_context(|| format!("failed to mmap {path}"))
 }
 
 pub fn save(index: &ProjectIndex) -> Result<()> {

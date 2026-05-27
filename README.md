@@ -12,7 +12,7 @@ Implemented today:
 - `.gitignore`-aware scanner.
 - Safe defaults for sensitive files.
 - JSON snapshot at `.repolens/index.json`.
-- Binary snapshot at `.repolens/index.bin` for faster reloads.
+- Binary snapshot at `.repolens/index.bin` with mmap loading for faster reloads.
 - Snapshot metadata command/tool.
 - Word and trigram indexes for search.
 - Parallel file indexing.
@@ -29,7 +29,7 @@ Implemented today:
 
 Not implemented yet:
 
-- mmap snapshot loading.
+- perf report for large repositories.
 
 ## Install From Source
 
