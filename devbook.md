@@ -39,7 +39,7 @@ Crates de base :
 - `rayon` : indexation parallèle.
 - `roaring` : bitmaps rapides.
 - `memmap2` : mmap snapshot/index.
-- `tree-sitter` : symboles. Rust, TypeScript, JavaScript, TSX et Python sont branchés en premier.
+- `tree-sitter` : symboles. Rust, TypeScript, JavaScript, TSX, Python, Go et PHP sont branchés.
 - `notify` : watcher.
 - `tokio`, `axum` : HTTP local.
 - `ropey` : édition texte.
@@ -339,8 +339,8 @@ Bench contre :
 - [x] Parser TypeScript.
 - [x] Parser JavaScript.
 - [x] Parser Python.
-- [ ] Parser Go.
-- [ ] Parser PHP.
+- [x] Parser Go.
+- [x] Parser PHP.
 - [x] Parser TSX.
 - [x] Commande `outline`.
 - [x] Commande `symbol`.
@@ -353,7 +353,8 @@ Bench contre :
 - [x] Résolution TS/JS relative.
 - [x] Résolution Rust basique.
 - [x] Résolution Python best-effort.
-- [ ] Résolution Go best-effort.
+- [x] Résolution Go best-effort.
+- [x] Résolution PHP best-effort.
 - [x] `deps_forward`.
 - [x] `deps_reverse`.
 - [x] Commande `deps`.
@@ -440,8 +441,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter parsers Go/PHP.
-2. Ajouter UI HTTP optionnelle.
-3. Ajouter build perf large repo.
-4. Ajouter snapshots mmap.
-5. Ajouter parallel indexing.
+1. Ajouter UI HTTP optionnelle.
+2. Ajouter build perf large repo.
+3. Ajouter snapshots mmap.
+4. Ajouter parallel indexing.
+5. Ajouter plus de langages.

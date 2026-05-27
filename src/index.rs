@@ -101,6 +101,14 @@ impl ProjectIndex {
                     symbol_list.extend(symbols::extract_python_symbols(id, &rel, &text)?);
                     deps_list.push(deps::extract_python_deps(id, &rel, &text)?);
                 }
+                Some("go") => {
+                    symbol_list.extend(symbols::extract_go_symbols(id, &rel, &text)?);
+                    deps_list.push(deps::extract_go_deps(id, &rel, &text)?);
+                }
+                Some("php") => {
+                    symbol_list.extend(symbols::extract_php_symbols(id, &rel, &text)?);
+                    deps_list.push(deps::extract_php_deps(id, &rel, &text)?);
+                }
                 _ => {}
             }
 
@@ -241,6 +249,8 @@ fn extract_symbols(id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Vec<Sym
         }
         Some("tsx") | Some("jsx") => symbols::extract_typescript_symbols(id, path, text, true),
         Some("py") | Some("pyw") => symbols::extract_python_symbols(id, path, text),
+        Some("go") => symbols::extract_go_symbols(id, path, text),
+        Some("php") => symbols::extract_php_symbols(id, path, text),
         _ => Ok(Vec::new()),
     }
 }
@@ -251,6 +261,8 @@ fn extract_deps(id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Option<Fil
         Some("js") | Some("mjs") | Some("cjs") | Some("ts") | Some("mts") | Some("cts")
         | Some("tsx") | Some("jsx") => deps::extract_ts_like_deps(id, path, text).map(Some),
         Some("py") | Some("pyw") => deps::extract_python_deps(id, path, text).map(Some),
+        Some("go") => deps::extract_go_deps(id, path, text).map(Some),
+        Some("php") => deps::extract_php_deps(id, path, text).map(Some),
         _ => Ok(None),
     }
 }

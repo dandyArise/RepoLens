@@ -15,8 +15,8 @@ Implemented today:
 - Binary snapshot at `.repolens/index.bin` for faster reloads.
 - Snapshot metadata command/tool.
 - Word and trigram indexes for search.
-- Symbol extraction with tree-sitter for Rust, TypeScript, JavaScript, TSX/JSX, and Python.
-- Import/dependency extraction for Rust, TS/JS, and Python.
+- Symbol extraction with tree-sitter for Rust, TypeScript, JavaScript, TSX/JSX, Python, Go, and PHP.
+- Import/dependency extraction for Rust, TS/JS, Python, Go, and PHP.
 - Relative TS/JS dependency resolution.
 - Forward and reverse dependency graph for resolved imports.
 - MCP stdio server with compact tools.
@@ -232,6 +232,8 @@ Currently extracts:
 - Rust: `use`, `mod`
 - TS/JS: `import`, `require`, with relative path resolution for `./` and `../`
 - Python: `import`, `from ... import`
+- Go: `import`
+- PHP: `use`, `require`, `include`
 
 ### `bench`
 

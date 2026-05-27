@@ -113,6 +113,46 @@ pub fn extract_python_symbols(
     Ok(symbols)
 }
 
+pub fn extract_go_symbols(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Vec<Symbol>> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_go::LANGUAGE.into())
+        .context("failed to load Go tree-sitter grammar")?;
+    let tree = parser
+        .parse(text, None)
+        .ok_or_else(|| anyhow::anyhow!("failed to parse Go file"))?;
+
+    let mut symbols = Vec::new();
+    walk_go(
+        tree.root_node(),
+        text.as_bytes(),
+        file_id,
+        path,
+        &mut symbols,
+    );
+    Ok(symbols)
+}
+
+pub fn extract_php_symbols(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Vec<Symbol>> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_php::LANGUAGE_PHP.into())
+        .context("failed to load PHP tree-sitter grammar")?;
+    let tree = parser
+        .parse(text, None)
+        .ok_or_else(|| anyhow::anyhow!("failed to parse PHP file"))?;
+
+    let mut symbols = Vec::new();
+    walk_php(
+        tree.root_node(),
+        text.as_bytes(),
+        file_id,
+        path,
+        &mut symbols,
+    );
+    Ok(symbols)
+}
+
 fn extract_ts_like_symbols(
     file_id: FileId,
     path: &Utf8PathBuf,
@@ -236,6 +276,40 @@ fn walk_python(
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         walk_python(child, source, file_id, path, next_in_class, symbols);
+    }
+}
+
+fn walk_go(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    symbols: &mut Vec<Symbol>,
+) {
+    if let Some(symbol) = go_symbol_from_node(node, source, file_id, path) {
+        symbols.push(symbol);
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_go(child, source, file_id, path, symbols);
+    }
+}
+
+fn walk_php(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    symbols: &mut Vec<Symbol>,
+) {
+    if let Some(symbol) = php_symbol_from_node(node, source, file_id, path) {
+        symbols.push(symbol);
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_php(child, source, file_id, path, symbols);
     }
 }
 
@@ -418,6 +492,123 @@ fn python_symbol_from_node(
     })
 }
 
+fn go_symbol_from_node(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+) -> Option<Symbol> {
+    let (kind, name) = match node.kind() {
+        "function_declaration" => (
+            SymbolKind::Function,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        "method_declaration" => (
+            SymbolKind::Method,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        "type_spec" => (
+            SymbolKind::Type,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        "const_spec" => (
+            SymbolKind::Const,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        "var_spec" => (
+            SymbolKind::Variable,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        _ => return None,
+    };
+
+    let start = node.start_position();
+    let end = node.end_position();
+    Some(Symbol {
+        name,
+        kind,
+        file_id,
+        path: path.clone(),
+        line: start.row + 1,
+        column: start.column + 1,
+        end_line: end.row + 1,
+    })
+}
+
+fn php_symbol_from_node(
+    node: Node,
+    source: &[u8],
+    file_id: FileId,
+    path: &Utf8PathBuf,
+) -> Option<Symbol> {
+    let (kind, name) = match node.kind() {
+        "function_definition" => (
+            SymbolKind::Function,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .trim_start_matches('$')
+                .to_string(),
+        ),
+        "method_declaration" => (
+            SymbolKind::Method,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        "class_declaration" => (
+            SymbolKind::Class,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        "interface_declaration" => (
+            SymbolKind::Interface,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        "trait_declaration" => (
+            SymbolKind::Trait,
+            node.child_by_field_name("name")?
+                .utf8_text(source)
+                .ok()?
+                .to_string(),
+        ),
+        _ => return None,
+    };
+
+    let start = node.start_position();
+    let end = node.end_position();
+    Some(Symbol {
+        name,
+        kind,
+        file_id,
+        path: path.clone(),
+        line: start.row + 1,
+        column: start.column + 1,
+        end_line: end.row + 1,
+    })
+}
+
 fn impl_name(node: Node, source: &[u8]) -> Option<String> {
     let mut cursor = node.walk();
     let mut parts = Vec::new();
@@ -441,7 +632,8 @@ mod tests {
     use camino::Utf8PathBuf;
 
     use super::{
-        SymbolKind, extract_python_symbols, extract_rust_symbols, extract_typescript_symbols,
+        SymbolKind, extract_go_symbols, extract_php_symbols, extract_python_symbols,
+        extract_rust_symbols, extract_typescript_symbols,
     };
 
     #[test]
@@ -553,6 +745,59 @@ def make_user():
             symbols
                 .iter()
                 .any(|s| s.name == "run" && s.kind == SymbolKind::Method)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "make_user" && s.kind == SymbolKind::Function)
+        );
+    }
+
+    #[test]
+    fn extracts_go_symbols() {
+        let text = r#"
+package main
+
+type User struct {}
+const Version = "1"
+var Count = 1
+func NewUser() User { return User{} }
+func (u User) Run() {}
+"#;
+        let symbols = extract_go_symbols(0, &Utf8PathBuf::from("main.go"), text).unwrap();
+
+        assert!(symbols.iter().any(|s| s.name == "User"));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "NewUser" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Run" && s.kind == SymbolKind::Method)
+        );
+    }
+
+    #[test]
+    fn extracts_php_symbols() {
+        let text = r#"
+<?php
+class Service { public function run() {} }
+interface Contract {}
+function make_user() {}
+"#;
+        let symbols = extract_php_symbols(0, &Utf8PathBuf::from("main.php"), text).unwrap();
+
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Service" && s.kind == SymbolKind::Class)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Contract" && s.kind == SymbolKind::Interface)
         );
         assert!(
             symbols

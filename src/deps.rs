@@ -34,6 +34,9 @@ pub enum ImportKind {
     CommonJsRequire,
     PythonImport,
     PythonFromImport,
+    GoImport,
+    PhpUse,
+    PhpRequire,
 }
 
 pub fn print_deps(index: &ProjectIndex, path: &Utf8PathBuf) {
@@ -187,6 +190,40 @@ pub fn extract_python_deps(file_id: FileId, path: &Utf8PathBuf, text: &str) -> R
     })
 }
 
+pub fn extract_go_deps(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<FileDeps> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_go::LANGUAGE.into())
+        .context("failed to load Go tree-sitter grammar")?;
+    let tree = parser
+        .parse(text, None)
+        .ok_or_else(|| anyhow::anyhow!("failed to parse Go file"))?;
+    let mut imports = Vec::new();
+    walk_go_deps(tree.root_node(), text.as_bytes(), &mut imports);
+    Ok(FileDeps {
+        file_id,
+        path: path.clone(),
+        imports,
+    })
+}
+
+pub fn extract_php_deps(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<FileDeps> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_php::LANGUAGE_PHP.into())
+        .context("failed to load PHP tree-sitter grammar")?;
+    let tree = parser
+        .parse(text, None)
+        .ok_or_else(|| anyhow::anyhow!("failed to parse PHP file"))?;
+    let mut imports = Vec::new();
+    walk_php_deps(tree.root_node(), text.as_bytes(), &mut imports);
+    Ok(FileDeps {
+        file_id,
+        path: path.clone(),
+        imports,
+    })
+}
+
 fn walk_rust_deps(node: Node, source: &[u8], imports: &mut Vec<ImportRef>) {
     match node.kind() {
         "use_declaration" => {
@@ -258,6 +295,46 @@ fn walk_python_deps(node: Node, source: &[u8], imports: &mut Vec<ImportRef>) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         walk_python_deps(child, source, imports);
+    }
+}
+
+fn walk_go_deps(node: Node, source: &[u8], imports: &mut Vec<ImportRef>) {
+    if node.kind() == "import_declaration" {
+        collect_string_literals(node, source, ImportKind::GoImport, imports);
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_go_deps(child, source, imports);
+    }
+}
+
+fn walk_php_deps(node: Node, source: &[u8], imports: &mut Vec<ImportRef>) {
+    match node.kind() {
+        "namespace_use_declaration" => {
+            if let Ok(text) = node.utf8_text(source) {
+                imports.push(import(
+                    node,
+                    text.trim_start_matches("use")
+                        .trim_end_matches(';')
+                        .trim()
+                        .to_string(),
+                    ImportKind::PhpUse,
+                ));
+            }
+        }
+        "require_expression"
+        | "include_expression"
+        | "require_once_expression"
+        | "include_once_expression" => {
+            collect_string_literals(node, source, ImportKind::PhpRequire, imports);
+        }
+        _ => {}
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_php_deps(child, source, imports);
     }
 }
 
@@ -353,7 +430,29 @@ fn call_name(node: Node, source: &[u8]) -> Option<String> {
 }
 
 fn clean_string(text: &str) -> String {
-    text.trim_matches('"').trim_matches('\'').to_string()
+    text.trim_matches('"')
+        .trim_matches('\'')
+        .trim_matches('`')
+        .to_string()
+}
+
+fn collect_string_literals(
+    node: Node,
+    source: &[u8],
+    kind: ImportKind,
+    imports: &mut Vec<ImportRef>,
+) {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if matches!(
+            child.kind(),
+            "interpreted_string_literal" | "raw_string_literal" | "string" | "string_literal"
+        ) && let Ok(text) = child.utf8_text(source)
+        {
+            imports.push(import(child, clean_string(text), kind.clone()));
+        }
+        collect_string_literals(child, source, kind.clone(), imports);
+    }
 }
 
 #[cfg(test)]
@@ -363,8 +462,9 @@ mod tests {
     use crate::index::FileEntry;
 
     use super::{
-        FileDeps, ImportKind, ImportRef, build_graph, extract_python_deps, extract_rust_deps,
-        extract_ts_like_deps, resolve_relative_ts_js_imports,
+        FileDeps, ImportKind, ImportRef, build_graph, extract_go_deps, extract_php_deps,
+        extract_python_deps, extract_rust_deps, extract_ts_like_deps,
+        resolve_relative_ts_js_imports,
     };
 
     #[test]
@@ -419,6 +519,36 @@ mod tests {
             deps.imports
                 .iter()
                 .any(|i| i.module == "pathlib import Path")
+        );
+    }
+
+    #[test]
+    fn extracts_go_deps() {
+        let deps = extract_go_deps(
+            0,
+            &Utf8PathBuf::from("main.go"),
+            "package main\nimport (\n \"fmt\"\n alias \"example.com/app\"\n)\n",
+        )
+        .unwrap();
+
+        assert!(deps.imports.iter().any(|i| i.module == "fmt"));
+        assert!(deps.imports.iter().any(|i| i.module == "example.com/app"));
+    }
+
+    #[test]
+    fn extracts_php_deps() {
+        let deps = extract_php_deps(
+            0,
+            &Utf8PathBuf::from("main.php"),
+            "<?php\nuse App\\Service;\nrequire 'vendor/autoload.php';\n",
+        )
+        .unwrap();
+
+        assert!(deps.imports.iter().any(|i| i.module == "App\\Service"));
+        assert!(
+            deps.imports
+                .iter()
+                .any(|i| i.module == "vendor/autoload.php")
         );
     }
 
