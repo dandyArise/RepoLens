@@ -404,13 +404,15 @@ Bench contre :
 
 ### Phase 11: Watcher
 
-- [ ] Ajouter `notify`.
+- [x] Ajouter `notify`.
 - [ ] Fallback polling.
-- [ ] Sequence number global.
-- [ ] Commande `changes`.
-- [ ] Commande `hot`.
-- [ ] Réindex incrémental.
-- [ ] Tests watcher.
+- [x] Sequence number global.
+- [x] Commande `watch`.
+- [x] Commande `changes`.
+- [x] Commande `hot`.
+- [ ] Réindex incrémental fin.
+- [x] Tool MCP `repolens_changes`.
+- [x] Tests watcher.
 
 ### Phase 12: Release
 
@@ -429,8 +431,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter watcher incrémental.
-2. Ajouter reverse deps.
-3. Ajouter HTTP local.
-4. Ajouter Linux arm64 release.
-5. Ajouter `repolens_snapshot`.
+1. Ajouter reverse deps.
+2. Ajouter HTTP local.
+3. Ajouter Linux arm64 release.
+4. Ajouter `repolens_snapshot`.
+5. Ajouter fallback polling watcher.

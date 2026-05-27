@@ -17,13 +17,14 @@ Implemented today:
 - Import/dependency extraction for Rust, TS/JS, and Python.
 - Relative TS/JS dependency resolution.
 - MCP stdio server with compact tools.
+- Watch mode with change sequence tracking.
 - Basic benchmark command with optional `rg` comparison.
 - CI for Windows, Linux, and macOS.
 
 Not implemented yet:
 
 - HTTP local server.
-- Watcher/incremental reindex.
+- Fine-grained incremental reindex.
 - Reverse dependency graph.
 
 ## Install From Source
@@ -251,6 +252,18 @@ Starts the MCP stdio server.
 repolens mcp .
 ```
 
+### `watch`, `changes`, `hot`
+
+`watch` keeps `.repolens/index.json` fresh and writes `.repolens/changes.json`.
+
+```powershell
+repolens watch .
+repolens changes .
+repolens hot . --limit 10
+```
+
+`changes` returns the latest watcher sequence and changed paths. `hot` prints only the most recent changed paths.
+
 ### `init`
 
 Writes MCP configuration for supported clients.
@@ -289,6 +302,7 @@ Implemented tools:
 - `repolens_symbol`
 - `repolens_deps`
 - `repolens_edit`
+- `repolens_changes`
 - `repolens_bundle`
 
 Example JSON-RPC call:
@@ -371,6 +385,7 @@ Current test coverage includes:
 - symbol extraction
 - dependency extraction
 - TS/JS relative dependency resolution
+- watcher state tracking
 - snapshot save/load
 - MCP request handling
 
@@ -378,7 +393,7 @@ Current test coverage includes:
 
 Next planned work:
 
-- Watcher and incremental reindex.
+- Fine-grained incremental reindex.
 - HTTP localhost server.
 - Linux arm64 release build.
 

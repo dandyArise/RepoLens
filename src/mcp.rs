@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::cli::EditOpArg;
 use crate::index::ProjectIndex;
-use crate::{deps, edit, read, search, snapshot, symbols};
+use crate::{deps, edit, read, search, snapshot, symbols, watcher};
 
 #[derive(Debug, Deserialize)]
 struct Request {
@@ -154,6 +154,11 @@ fn tools() -> Vec<Value> {
             "Apply a guarded line edit. Requires current file hash.",
             json!({"type": "object", "required": ["path", "op", "start", "hash"], "properties": {"path": {"type": "string"}, "op": {"type": "string", "enum": ["replace", "insert", "delete"]}, "start": {"type": "integer"}, "end": {"type": "integer"}, "content": {"type": "string"}, "hash": {"type": "string"}}}),
         ),
+        tool(
+            "repolens_changes",
+            "Return latest watcher sequence and changed paths.",
+            json!({"type": "object", "properties": {}}),
+        ),
     ]
 }
 
@@ -252,6 +257,7 @@ fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value>
                 hash
             )?)
         }
+        "repolens_changes" => json!(watcher::read_state(&index.root)?),
         "repolens_bundle" => {
             let ops = args
                 .get("ops")

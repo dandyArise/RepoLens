@@ -13,6 +13,7 @@ mod search;
 mod security;
 mod snapshot;
 mod symbols;
+mod watcher;
 
 use anyhow::Result;
 use clap::Parser;
@@ -99,6 +100,15 @@ fn main() -> Result<()> {
         }
         Command::Init { target, root } => {
             init::run(target, &root)?;
+        }
+        Command::Watch { root } => {
+            watcher::watch(&root)?;
+        }
+        Command::Changes { root } => {
+            watcher::print_changes(&root)?;
+        }
+        Command::Hot { root, limit } => {
+            watcher::print_hot(&root, limit)?;
         }
     }
 

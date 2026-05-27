@@ -102,6 +102,20 @@ pub enum Command {
         #[arg(default_value = ".")]
         root: PathBuf,
     },
+    Watch {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
+    Changes {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
+    Hot {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+        #[arg(short, long, default_value_t = 20)]
+        limit: usize,
+    },
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
