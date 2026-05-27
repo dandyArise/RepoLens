@@ -13,7 +13,7 @@ RepoLens doit fournir :
 - graphe de dépendances;
 - snapshot persistant;
 - serveur MCP stdio;
-- serveur HTTP local optionnel;
+- serveur HTTP local;
 - compatibilité Windows, Linux, macOS et Unix-like dès le départ.
 
 ## Non-objectifs v1
@@ -377,18 +377,23 @@ Bench contre :
 
 ### Phase 9: HTTP Local
 
-- [ ] Ajouter `tokio`.
-- [ ] Ajouter `axum`.
-- [ ] Route `/status`.
-- [ ] Route `/tree`.
-- [ ] Route `/search`.
-- [ ] Route `/word`.
-- [ ] Route `/read`.
-- [ ] Route `/outline`.
-- [ ] Route `/symbol`.
-- [ ] Route `/deps`.
-- [ ] Bind localhost only.
-- [ ] Tests HTTP.
+- [x] Ajouter `tokio`.
+- [x] Ajouter `axum`.
+- [x] Commande `serve`.
+- [x] Route `/status`.
+- [x] Route `/snapshot`.
+- [x] Route `/tree`.
+- [x] Route `/search`.
+- [x] Route `/word`.
+- [x] Route `/read`.
+- [x] Route `/outline`.
+- [x] Route `/symbol`.
+- [x] Route `/deps`.
+- [x] Route `/rdeps`.
+- [x] Route `/changes`.
+- [x] Route `/edit`.
+- [x] Bind localhost only.
+- [x] Tests HTTP.
 
 ### Phase 10: Edition
 
@@ -433,8 +438,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter HTTP local.
-2. Ajouter Linux arm64 release.
-3. Ajouter fallback polling watcher.
-4. Ajouter documentation installation.
-5. Ajouter tests sécurité Windows/Linux.
+1. Ajouter Linux arm64 release.
+2. Ajouter fallback polling watcher.
+3. Ajouter documentation installation.
+4. Ajouter tests sécurité Windows/Linux.
+5. Ajouter réindex incrémental fin.

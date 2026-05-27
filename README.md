@@ -2,7 +2,7 @@
 
 Fast local codebase index for AI agents.
 
-RepoLens scans a repository, builds compact local indexes, and exposes code navigation tools through both a CLI and an MCP stdio server. It is designed to be cross-platform from the start: Windows, Linux, macOS, and Unix-like environments.
+RepoLens scans a repository, builds compact local indexes, and exposes code navigation tools through a CLI, an MCP stdio server, and a localhost HTTP API. It is designed to be cross-platform from the start: Windows, Linux, macOS, and Unix-like environments.
 
 ## Status
 
@@ -19,13 +19,13 @@ Implemented today:
 - Relative TS/JS dependency resolution.
 - Forward and reverse dependency graph for resolved imports.
 - MCP stdio server with compact tools.
+- Localhost HTTP API.
 - Watch mode with change sequence tracking.
 - Basic benchmark command with optional `rg` comparison.
 - CI for Windows, Linux, and macOS.
 
 Not implemented yet:
 
-- HTTP local server.
 - Fine-grained incremental reindex.
 
 ## Install From Source
@@ -254,6 +254,30 @@ Starts the MCP stdio server.
 repolens mcp .
 ```
 
+### `serve`
+
+Starts the localhost HTTP API. Non-loopback hosts are refused.
+
+```powershell
+repolens serve .
+repolens serve . --host 127.0.0.1 --port 4177
+```
+
+Routes:
+
+- `GET /status`
+- `GET /snapshot`
+- `GET /tree?limit=200`
+- `GET /search?q=ProjectIndex&limit=20`
+- `GET /word?q=ProjectIndex&limit=20`
+- `GET /read?path=src/main.rs&lines=1-40`
+- `GET /outline?path=src/main.rs`
+- `GET /symbol?q=ProjectIndex&limit=20`
+- `GET /deps?path=src/main.rs`
+- `GET /rdeps?path=src/main.rs`
+- `GET /changes`
+- `POST /edit`
+
 ### `snapshot`
 
 Prints `.repolens/index.json` metadata.
@@ -399,6 +423,7 @@ Current test coverage includes:
 - TS/JS relative dependency resolution
 - forward/reverse dependency graph
 - watcher state tracking
+- HTTP loopback guard
 - snapshot save/load
 - MCP request handling
 
@@ -406,7 +431,6 @@ Current test coverage includes:
 
 Next planned work:
 
-- HTTP localhost server.
 - Fine-grained incremental reindex.
 - Linux arm64 release build.
 

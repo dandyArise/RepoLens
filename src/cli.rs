@@ -58,6 +58,14 @@ pub enum Command {
         #[arg(default_value = ".")]
         root: PathBuf,
     },
+    Serve {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        #[arg(long, default_value_t = 4177)]
+        port: u16,
+    },
     Outline {
         path: Utf8PathBuf,
         #[arg(default_value = ".")]

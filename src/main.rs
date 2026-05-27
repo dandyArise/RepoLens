@@ -3,6 +3,7 @@ mod cli;
 mod config;
 mod deps;
 mod edit;
+mod http;
 mod index;
 mod init;
 mod mcp;
@@ -67,6 +68,9 @@ fn main() -> Result<()> {
         }
         Command::Mcp { root } => {
             mcp::serve(&root)?;
+        }
+        Command::Serve { root, host, port } => {
+            http::serve(&root, &host, port)?;
         }
         Command::Outline { path, root } => {
             let index = snapshot::load_or_build(&root)?;
