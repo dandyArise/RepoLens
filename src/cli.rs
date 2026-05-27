@@ -121,6 +121,20 @@ pub enum Command {
         #[arg(default_value = ".")]
         root: PathBuf,
     },
+    Enable {
+        #[arg(long, value_enum, default_value_t = InitTargetArg::All)]
+        target: InitTargetArg,
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
+    Disable {
+        #[arg(long, value_enum, default_value_t = InitTargetArg::All)]
+        target: InitTargetArg,
+    },
+    McpStatus {
+        #[arg(long, value_enum, default_value_t = InitTargetArg::All)]
+        target: InitTargetArg,
+    },
     Watch {
         #[arg(default_value = ".")]
         root: PathBuf,

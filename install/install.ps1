@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("install", "update", "uninstall")]
+    [ValidateSet("install", "update", "uninstall", "enable", "disable", "status")]
     [string]$Action = "install",
     [string]$Version = "latest",
     [string]$InstallDir = "$env:USERPROFILE\bin",
@@ -23,6 +23,23 @@ if ($Action -eq "uninstall") {
         Write-Host "repolens is not installed at $installedExe"
     }
     exit 0
+}
+
+if ($Action -in @("enable", "disable", "status")) {
+    if (-not (Test-Path -LiteralPath $installedExe)) {
+        throw "repolens is not installed at $installedExe"
+    }
+
+    if ($Action -eq "enable") {
+        & $installedExe enable --target $InitTarget $InitRoot
+    }
+    elseif ($Action -eq "disable") {
+        & $installedExe disable --target $InitTarget
+    }
+    else {
+        & $installedExe mcp-status --target $InitTarget
+    }
+    exit $LASTEXITCODE
 }
 
 function Get-Release {

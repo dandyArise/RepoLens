@@ -20,7 +20,7 @@ need curl
 need tar
 
 case "$ACTION" in
-  install|update|uninstall) ;;
+  install|update|uninstall|enable|disable|status) ;;
   *) echo "invalid REPOLENS_ACTION: $ACTION" >&2; exit 1 ;;
 esac
 
@@ -32,6 +32,25 @@ if [ "$ACTION" = "uninstall" ]; then
     echo "repolens is not installed at $INSTALL_DIR/repolens"
   fi
   exit 0
+fi
+
+if [ "$ACTION" = "enable" ] || [ "$ACTION" = "disable" ] || [ "$ACTION" = "status" ]; then
+  if [ ! -x "$INSTALL_DIR/repolens" ]; then
+    echo "repolens is not installed at $INSTALL_DIR/repolens" >&2
+    exit 1
+  fi
+  case "$INIT_TARGET" in
+    all|codex|claude|cursor) ;;
+    *) echo "invalid REPOLENS_INIT_TARGET: $INIT_TARGET" >&2; exit 1 ;;
+  esac
+  if [ "$ACTION" = "enable" ]; then
+    "$INSTALL_DIR/repolens" enable --target "$INIT_TARGET" "$INIT_ROOT"
+  elif [ "$ACTION" = "disable" ]; then
+    "$INSTALL_DIR/repolens" disable --target "$INIT_TARGET"
+  else
+    "$INSTALL_DIR/repolens" mcp-status --target "$INIT_TARGET"
+  fi
+  exit $?
 fi
 
 case "$(uname -s)" in

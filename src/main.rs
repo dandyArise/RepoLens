@@ -112,7 +112,16 @@ fn main() -> Result<()> {
             println!("lines: {}", result.lines);
         }
         Command::Init { target, root } => {
-            init::run(target, &root)?;
+            init::enable(target, &root)?;
+        }
+        Command::Enable { target, root } => {
+            init::enable(target, &root)?;
+        }
+        Command::Disable { target } => {
+            init::disable(target)?;
+        }
+        Command::McpStatus { target } => {
+            init::status(target)?;
         }
         Command::Watch {
             root,

@@ -7,7 +7,7 @@ RepoLens scans a repository, builds compact local indexes, and exposes code navi
 ## Links
 
 - 🚀 [Latest release](https://github.com/dandyArise/RepoLens/releases/latest)
-- 📦 [v0.1.0 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.0)
+- 📦 [v0.1.1 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.1)
 - ⚙️ [GitHub Actions builds](https://github.com/dandyArise/RepoLens/actions)
 - 🧩 [Windows installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.ps1)
 - 🧩 [Linux/macOS installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.sh)
@@ -78,16 +78,22 @@ Defaults:
 Installer options:
 
 ```powershell
-.\install\install.ps1 -Version v0.1.0 -InstallDir "$env:USERPROFILE\bin"
+.\install\install.ps1 -Version v0.1.1 -InstallDir "$env:USERPROFILE\bin"
 .\install\install.ps1 -Init -InitTarget codex -InitRoot "$PWD"
 .\install\install.ps1 -Action update
+.\install\install.ps1 -Action enable -InitTarget codex -InitRoot "$PWD"
+.\install\install.ps1 -Action status -InitTarget all
+.\install\install.ps1 -Action disable -InitTarget codex
 .\install\install.ps1 -Action uninstall
 ```
 
 ```sh
-REPOLENS_VERSION=v0.1.0 REPOLENS_INSTALL_DIR="$HOME/.local/bin" sh install/install.sh
+REPOLENS_VERSION=v0.1.1 REPOLENS_INSTALL_DIR="$HOME/.local/bin" sh install/install.sh
 REPOLENS_INIT=1 REPOLENS_INIT_TARGET=codex REPOLENS_INIT_ROOT="$PWD" sh install/install.sh
 REPOLENS_ACTION=update sh install/install.sh
+REPOLENS_ACTION=enable REPOLENS_INIT_TARGET=codex REPOLENS_INIT_ROOT="$PWD" sh install/install.sh
+REPOLENS_ACTION=status REPOLENS_INIT_TARGET=all sh install/install.sh
+REPOLENS_ACTION=disable REPOLENS_INIT_TARGET=codex sh install/install.sh
 REPOLENS_ACTION=uninstall sh install/install.sh
 ```
 
@@ -108,13 +114,24 @@ From the repository you want to index:
 repolens init . --target all
 ```
 
-Or configure one client only:
+`init` and `enable` both register RepoLens for a repository. Configure one client only:
 
 ```powershell
+repolens enable . --target codex
 repolens init . --target codex
 repolens init . --target claude
 repolens init . --target cursor
 ```
+
+Check or remove the MCP registration without uninstalling the binary:
+
+```powershell
+repolens mcp-status --target all
+repolens disable --target codex
+repolens disable --target all
+```
+
+`disable` only removes RepoLens from the client MCP config. It keeps the rest of the config file and writes a `.bak` backup first.
 
 Then restart your AI client. The client will receive a `repolens` MCP server that runs:
 
@@ -170,8 +187,8 @@ Published assets are available on the [latest release page](https://github.com/d
 To create a release:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 During development:
@@ -403,13 +420,14 @@ repolens hot . --limit 10
 
 ### `init`
 
-Writes MCP configuration for supported clients.
+Writes MCP configuration for supported clients. `enable` is an explicit alias for the same operation.
 
 ```powershell
 repolens init . --target all
 repolens init . --target codex
 repolens init . --target claude
 repolens init . --target cursor
+repolens enable . --target codex
 ```
 
 Current targets:
@@ -425,6 +443,23 @@ Current targets:
 ```text
 repolens mcp <repo-root>
 ```
+
+### `enable`, `disable`, `mcp-status`
+
+Manages RepoLens MCP registration without installing or uninstalling the binary.
+
+```powershell
+repolens enable . --target all
+repolens mcp-status --target all
+repolens disable --target all
+```
+
+`disable` removes only RepoLens:
+
+- Codex: removes `[mcp_servers.repolens]`
+- Claude Desktop/Cursor: removes `mcpServers.repolens`
+
+Existing unrelated MCP servers are kept.
 
 ## MCP Tools 🤖
 
