@@ -353,9 +353,10 @@ Bench contre :
 - [x] Résolution Rust basique.
 - [x] Résolution Python best-effort.
 - [ ] Résolution Go best-effort.
-- [ ] `deps_forward`.
-- [ ] `deps_reverse`.
+- [x] `deps_forward`.
+- [x] `deps_reverse`.
 - [x] Commande `deps`.
+- [x] Commande `rdeps`.
 - [x] Tests deps.
 
 ### Phase 8: MCP
@@ -371,6 +372,7 @@ Bench contre :
 - [x] Tool `repolens_outline`.
 - [x] Tool `repolens_symbol`.
 - [x] Tool `repolens_deps`.
+- [x] Tool `repolens_rdeps`.
 - [x] Tests MCP request/response.
 
 ### Phase 9: HTTP Local
@@ -431,8 +433,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter reverse deps.
-2. Ajouter HTTP local.
-3. Ajouter Linux arm64 release.
-4. Ajouter `repolens_snapshot`.
-5. Ajouter fallback polling watcher.
+1. Ajouter HTTP local.
+2. Ajouter Linux arm64 release.
+3. Ajouter `repolens_snapshot`.
+4. Ajouter fallback polling watcher.
+5. Ajouter documentation installation.

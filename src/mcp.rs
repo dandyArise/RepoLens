@@ -150,6 +150,11 @@ fn tools() -> Vec<Value> {
             json!({"type": "object", "required": ["path"], "properties": {"path": {"type": "string"}}}),
         ),
         tool(
+            "repolens_rdeps",
+            "Return files that import one indexed file.",
+            json!({"type": "object", "required": ["path"], "properties": {"path": {"type": "string"}}}),
+        ),
+        tool(
             "repolens_edit",
             "Apply a guarded line edit. Requires current file hash.",
             json!({"type": "object", "required": ["path", "op", "start", "hash"], "properties": {"path": {"type": "string"}, "op": {"type": "string", "enum": ["replace", "insert", "delete"]}, "start": {"type": "integer"}, "end": {"type": "integer"}, "content": {"type": "string"}, "hash": {"type": "string"}}}),
@@ -196,7 +201,9 @@ fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value>
             "trigrams": index.trigrams.len(),
             "symbols": index.symbols.len(),
             "symbol_names": index.symbols_by_name.len(),
-            "deps_files": index.deps.len()
+            "deps_files": index.deps.len(),
+            "deps_forward": index.deps_forward.len(),
+            "deps_reverse": index.deps_reverse.len()
         }),
         "repolens_tree" => {
             let limit = get_usize(&args, "limit").unwrap_or(200);
@@ -239,6 +246,10 @@ fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value>
         "repolens_deps" => {
             let path = Utf8PathBuf::from(get_str(&args, "path")?);
             json!(deps::deps_for_file(index, &path))
+        }
+        "repolens_rdeps" => {
+            let path = Utf8PathBuf::from(get_str(&args, "path")?);
+            json!(deps::reverse_deps_for_file(index, &path))
         }
         "repolens_edit" => {
             let path = Utf8PathBuf::from(get_str(&args, "path")?);

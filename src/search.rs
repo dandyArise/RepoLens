@@ -165,6 +165,8 @@ mod tests {
             symbols: Vec::new(),
             symbols_by_name: BTreeMap::new(),
             deps: Vec::new(),
+            deps_forward: BTreeMap::new(),
+            deps_reverse: BTreeMap::new(),
         };
 
         assert_eq!(super::candidate_files(&index, "abcd"), vec![1]);

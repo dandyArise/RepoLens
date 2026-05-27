@@ -30,6 +30,10 @@ pub struct ProjectIndex {
     pub symbols_by_name: BTreeMap<String, Vec<SymbolId>>,
     #[serde(default)]
     pub deps: Vec<FileDeps>,
+    #[serde(default)]
+    pub deps_forward: BTreeMap<FileId, Vec<FileId>>,
+    #[serde(default)]
+    pub deps_reverse: BTreeMap<FileId, Vec<FileId>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -115,9 +119,10 @@ impl ProjectIndex {
 
         files.sort_by(|a, b| a.path.cmp(&b.path));
         deps::resolve_relative_ts_js_imports(&mut deps_list, &files);
+        let (deps_forward, deps_reverse) = deps::build_graph(&deps_list);
         let symbols_by_name = index_symbols_by_name(&symbol_list);
         Ok(Self {
-            version: 5,
+            version: 6,
             root,
             files,
             words: flatten(words),
@@ -125,11 +130,17 @@ impl ProjectIndex {
             symbols: symbol_list,
             symbols_by_name,
             deps: deps_list,
+            deps_forward,
+            deps_reverse,
         })
     }
 
     pub fn file_by_id(&self, id: FileId) -> Option<&FileEntry> {
         self.files.iter().find(|file| file.id == id)
+    }
+
+    pub fn file_by_path(&self, path: &Utf8PathBuf) -> Option<&FileEntry> {
+        self.files.iter().find(|file| file.path == *path)
     }
 }
 

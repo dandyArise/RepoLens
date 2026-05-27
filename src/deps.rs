@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
@@ -63,6 +63,46 @@ pub fn deps_for_file(index: &ProjectIndex, path: &Utf8PathBuf) -> Vec<FileDeps> 
         .collect()
 }
 
+pub fn print_reverse_deps(index: &ProjectIndex, path: &Utf8PathBuf) {
+    for path in reverse_deps_for_file(index, path) {
+        println!("{path}");
+    }
+}
+
+pub fn reverse_deps_for_file(index: &ProjectIndex, path: &Utf8PathBuf) -> Vec<Utf8PathBuf> {
+    let Some(file) = index.file_by_path(path) else {
+        return Vec::new();
+    };
+    index
+        .deps_reverse
+        .get(&file.id)
+        .into_iter()
+        .flatten()
+        .filter_map(|id| index.file_by_id(*id))
+        .map(|file| file.path.clone())
+        .collect()
+}
+
+pub fn build_graph(
+    deps: &[FileDeps],
+) -> (BTreeMap<FileId, Vec<FileId>>, BTreeMap<FileId, Vec<FileId>>) {
+    let mut forward: BTreeMap<FileId, BTreeSet<FileId>> = BTreeMap::new();
+    let mut reverse: BTreeMap<FileId, BTreeSet<FileId>> = BTreeMap::new();
+
+    for file_deps in deps {
+        for target in file_deps
+            .imports
+            .iter()
+            .filter_map(|import| import.resolved_file_id)
+        {
+            forward.entry(file_deps.file_id).or_default().insert(target);
+            reverse.entry(target).or_default().insert(file_deps.file_id);
+        }
+    }
+
+    (flatten_graph(forward), flatten_graph(reverse))
+}
+
 pub fn resolve_relative_ts_js_imports(deps: &mut [FileDeps], files: &[FileEntry]) {
     let by_path: BTreeMap<_, _> = files
         .iter()
@@ -87,6 +127,13 @@ pub fn resolve_relative_ts_js_imports(deps: &mut [FileDeps], files: &[FileEntry]
             }
         }
     }
+}
+
+fn flatten_graph(graph: BTreeMap<FileId, BTreeSet<FileId>>) -> BTreeMap<FileId, Vec<FileId>> {
+    graph
+        .into_iter()
+        .map(|(source, targets)| (source, targets.into_iter().collect()))
+        .collect()
 }
 
 pub fn extract_rust_deps(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<FileDeps> {
@@ -316,7 +363,7 @@ mod tests {
     use crate::index::FileEntry;
 
     use super::{
-        FileDeps, ImportKind, ImportRef, extract_python_deps, extract_rust_deps,
+        FileDeps, ImportKind, ImportRef, build_graph, extract_python_deps, extract_rust_deps,
         extract_ts_like_deps, resolve_relative_ts_js_imports,
     };
 
@@ -404,6 +451,26 @@ mod tests {
             Some(Utf8PathBuf::from("src/lib/math.ts"))
         );
         assert_eq!(deps[0].imports[2].resolved_path, None);
+    }
+
+    #[test]
+    fn builds_forward_and_reverse_dependency_graphs() {
+        let deps = vec![FileDeps {
+            file_id: 0,
+            path: Utf8PathBuf::from("src/main.ts"),
+            imports: vec![ImportRef {
+                module: "./util".to_string(),
+                line: 1,
+                kind: ImportKind::EsImport,
+                resolved_path: Some(Utf8PathBuf::from("src/util.ts")),
+                resolved_file_id: Some(1),
+            }],
+        }];
+
+        let (forward, reverse) = build_graph(&deps);
+
+        assert_eq!(forward.get(&0), Some(&vec![1]));
+        assert_eq!(reverse.get(&1), Some(&vec![0]));
     }
 
     fn file(id: u32, path: &str) -> FileEntry {

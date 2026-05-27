@@ -76,6 +76,10 @@ fn main() -> Result<()> {
             let index = snapshot::load_or_build(&root)?;
             deps::print_deps(&index, &path);
         }
+        Command::Rdeps { path, root } => {
+            let index = snapshot::load_or_build(&root)?;
+            deps::print_reverse_deps(&index, &path);
+        }
         Command::Bench {
             root,
             query,

@@ -71,6 +71,11 @@ pub enum Command {
         #[arg(default_value = ".")]
         root: PathBuf,
     },
+    Rdeps {
+        path: Utf8PathBuf,
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
     Bench {
         #[arg(default_value = ".")]
         root: PathBuf,

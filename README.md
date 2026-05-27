@@ -16,6 +16,7 @@ Implemented today:
 - Symbol extraction with tree-sitter for Rust, TypeScript, JavaScript, TSX/JSX, and Python.
 - Import/dependency extraction for Rust, TS/JS, and Python.
 - Relative TS/JS dependency resolution.
+- Forward and reverse dependency graph for resolved imports.
 - MCP stdio server with compact tools.
 - Watch mode with change sequence tracking.
 - Basic benchmark command with optional `rg` comparison.
@@ -25,7 +26,6 @@ Not implemented yet:
 
 - HTTP local server.
 - Fine-grained incremental reindex.
-- Reverse dependency graph.
 
 ## Install From Source
 
@@ -207,6 +207,7 @@ Lists imports/dependencies found in one file.
 repolens deps src/main.rs .
 repolens deps src/app.ts .
 repolens deps main.py .
+repolens rdeps src/utils.ts .
 ```
 
 Currently extracts:
@@ -301,6 +302,7 @@ Implemented tools:
 - `repolens_outline`
 - `repolens_symbol`
 - `repolens_deps`
+- `repolens_rdeps`
 - `repolens_edit`
 - `repolens_changes`
 - `repolens_bundle`
@@ -385,6 +387,7 @@ Current test coverage includes:
 - symbol extraction
 - dependency extraction
 - TS/JS relative dependency resolution
+- forward/reverse dependency graph
 - watcher state tracking
 - snapshot save/load
 - MCP request handling
@@ -393,14 +396,13 @@ Current test coverage includes:
 
 Next planned work:
 
-- Fine-grained incremental reindex.
 - HTTP localhost server.
+- Fine-grained incremental reindex.
 - Linux arm64 release build.
 
 Longer term:
 
 - More languages.
-- Reverse dependency graph.
 - Faster binary snapshots.
 - Parallel indexing.
 - More robust MCP auto-config variants.
