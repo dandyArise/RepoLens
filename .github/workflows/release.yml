@@ -25,6 +25,10 @@ jobs:
             asset: repolens-linux-x86_64
             archive: tar.gz
             binary: repolens
+          - os: ubuntu-24.04-arm
+            asset: repolens-linux-arm64
+            archive: tar.gz
+            binary: repolens
           - os: macos-13
             asset: repolens-darwin-x86_64
             archive: tar.gz

@@ -53,6 +53,7 @@ Release workflow targets:
 
 - `repolens-windows-x86_64.zip`
 - `repolens-linux-x86_64.tar.gz`
+- `repolens-linux-arm64.tar.gz`
 - `repolens-darwin-x86_64.tar.gz`
 - `repolens-darwin-arm64.tar.gz`
 
@@ -432,7 +433,6 @@ Current test coverage includes:
 Next planned work:
 
 - Fine-grained incremental reindex.
-- Linux arm64 release build.
 
 Longer term:
 

@@ -327,7 +327,7 @@ Bench contre :
 - [x] `cargo test`.
 - [x] Build release Windows.
 - [x] Build release Linux x86_64.
-- [ ] Build release Linux arm64.
+- [x] Build release Linux arm64.
 - [x] Build release macOS x86_64.
 - [x] Build release macOS arm64.
 
@@ -438,8 +438,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter Linux arm64 release.
-2. Ajouter fallback polling watcher.
-3. Ajouter documentation installation.
-4. Ajouter tests sécurité Windows/Linux.
-5. Ajouter réindex incrémental fin.
+1. Ajouter fallback polling watcher.
+2. Ajouter documentation installation.
+3. Ajouter tests sécurité Windows/Linux.
+4. Ajouter réindex incrémental fin.
+5. Ajouter snapshots binaires plus rapides.
