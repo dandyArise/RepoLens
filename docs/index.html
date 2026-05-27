@@ -792,7 +792,7 @@
     <div class="feature">
       <div class="feature-icon">🤖</div>
       <h4 data-fr="Serveur MCP stdio" data-en="MCP stdio server">Serveur MCP stdio</h4>
-      <p data-fr="9 outils MCP exposés. Compatible Claude, Cursor, Codex et tout agent MCP." data-en="9 MCP tools exposed. Compatible with Claude, Cursor, Codex and any MCP agent.">9 outils MCP exposés. Compatible Claude, Cursor, Codex et tout agent MCP.</p>
+      <p data-fr="13 outils MCP exposés. Compatible Claude, Cursor, Codex et tout agent MCP." data-en="13 MCP tools exposed. Compatible with Claude, Cursor, Codex and any MCP agent.">13 outils MCP exposés. Compatible Claude, Cursor, Codex et tout agent MCP.</p>
     </div>
     <div class="feature">
       <div class="feature-icon">🛡️</div>
@@ -868,7 +868,7 @@
 
   <div class="mcp-grid reveal">
     <div>
-      <p class="section-desc" style="margin-bottom:1.5rem" data-fr="RepoLens expose 9 outils MCP via stdio. Connecte Claude, Cursor, Codex ou n'importe quel agent compatible MCP directement à ton index local." data-en="RepoLens exposes 9 MCP tools via stdio. Connect Claude, Cursor, Codex or any MCP-compatible agent directly to your local index.">RepoLens expose 9 outils MCP via stdio. Connecte Claude, Cursor, Codex ou n'importe quel agent compatible MCP directement à ton index local.</p>
+      <p class="section-desc" style="margin-bottom:1.5rem" data-fr="RepoLens expose 13 outils MCP via stdio. Connecte Claude, Cursor, Codex ou n'importe quel agent compatible MCP directement à ton index local." data-en="RepoLens exposes 13 MCP tools via stdio. Connect Claude, Cursor, Codex or any MCP-compatible agent directly to your local index.">RepoLens expose 13 outils MCP via stdio. Connecte Claude, Cursor, Codex ou n'importe quel agent compatible MCP directement à ton index local.</p>
       <div class="mcp-tools-list">
         <span class="mcp-tool">repolens_status</span>
         <span class="mcp-tool">repolens_tree</span>
@@ -878,6 +878,10 @@
         <span class="mcp-tool">repolens_outline</span>
         <span class="mcp-tool">repolens_symbol</span>
         <span class="mcp-tool">repolens_deps</span>
+        <span class="mcp-tool">repolens_rdeps</span>
+        <span class="mcp-tool">repolens_edit</span>
+        <span class="mcp-tool">repolens_changes</span>
+        <span class="mcp-tool">repolens_snapshot</span>
         <span class="mcp-tool">repolens_bundle</span>
       </div>
     </div>
@@ -912,24 +916,23 @@
   <h2 data-fr="Prêt en <em>quelques minutes.</em>" data-en="Ready in <em>minutes.</em>">Prêt en <em>quelques minutes.</em></h2>
 
   <div class="install-tabs reveal">
-    <button class="tab-btn active" onclick="showTab('src')" data-fr="Depuis les sources" data-en="From source">Depuis les sources</button>
-    <button class="tab-btn" onclick="showTab('release')" data-fr="Release binaire" data-en="Binary release">Release binaire</button>
+    <button class="tab-btn active" onclick="showTab('src')" data-fr="Install global" data-en="Global install">Install global</button>
+    <button class="tab-btn" onclick="showTab('release')" data-fr="Depuis les sources" data-en="From source">Depuis les sources</button>
   </div>
 
   <div class="tab-content active" id="tab-src">
+    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:1rem" data-fr="Installe RepoLens une fois, puis active-le dans les projets où tu veux l'utiliser." data-en="Install RepoLens once, then enable it in the projects where you want to use it.">Installe RepoLens une fois, puis active-le dans les projets où tu veux l'utiliser.</p>
+    <div class="code-block"><code>iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.ps1 -UseBasicParsing | iex</code><button class="copy-btn" onclick="copyCode(this, 'iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.ps1 -UseBasicParsing | iex')">COPY</button></div>
+    <div class="code-block"><code>cd my-project</code><button class="copy-btn" onclick="copyCode(this, 'cd my-project')">COPY</button></div>
+    <div class="code-block"><code>repolens init . --target codex</code><button class="copy-btn" onclick="copyCode(this, 'repolens init . --target codex')">COPY</button></div>
+    <div class="code-block"><code>repolens mcp-status --target codex</code><button class="copy-btn" onclick="copyCode(this, 'repolens mcp-status --target codex')">COPY</button></div>
+  </div>
+
+  <div class="tab-content" id="tab-release">
     <div class="code-block"><code>git clone https://github.com/dandyArise/RepoLens.git</code><button class="copy-btn" onclick="copyCode(this, 'git clone https://github.com/dandyArise/RepoLens.git')">COPY</button></div>
     <div class="code-block"><code>cd RepoLens</code><button class="copy-btn" onclick="copyCode(this, 'cd RepoLens')">COPY</button></div>
     <div class="code-block"><code>cargo build --release</code><button class="copy-btn" onclick="copyCode(this, 'cargo build --release')">COPY</button></div>
     <div class="code-block"><code>./target/release/repolens --help</code><button class="copy-btn" onclick="copyCode(this, './target/release/repolens --help')">COPY</button></div>
-  </div>
-
-  <div class="tab-content" id="tab-release">
-    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:1rem" data-fr="Télécharge le binaire correspondant à ta plateforme depuis les releases GitHub :" data-en="Download the binary for your platform from the GitHub releases:">Télécharge le binaire correspondant à ta plateforme depuis les releases GitHub :</p>
-    <div class="code-block"><code>repolens-windows-x86_64.zip</code><button class="copy-btn" onclick="copyCode(this, 'repolens-windows-x86_64.zip')">COPY</button></div>
-    <div class="code-block"><code>repolens-linux-x86_64.tar.gz</code><button class="copy-btn" onclick="copyCode(this, 'repolens-linux-x86_64.tar.gz')">COPY</button></div>
-    <div class="code-block"><code>repolens-darwin-x86_64.tar.gz</code><button class="copy-btn" onclick="copyCode(this, 'repolens-darwin-x86_64.tar.gz')">COPY</button></div>
-    <div class="code-block"><code>repolens-darwin-arm64.tar.gz</code><button class="copy-btn" onclick="copyCode(this, 'repolens-darwin-arm64.tar.gz')">COPY</button></div>
-    <p style="color:var(--text-dim);font-size:.78rem;margin-top:.8rem" data-fr="Chaque archive est accompagnée d'un fichier .sha256 pour vérification." data-en="Each archive comes with a .sha256 checksum file.">Chaque archive est accompagnée d'un fichier .sha256 pour vérification.</p>
   </div>
 </section>
 
@@ -945,19 +948,19 @@
       <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Scanner .gitignore-aware" data-en=".gitignore-aware scanner">Scanner .gitignore-aware</span></div>
       <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Index word + trigram" data-en="Word + trigram index">Index word + trigram</span></div>
       <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Extraction de symboles (tree-sitter)" data-en="Symbol extraction (tree-sitter)">Extraction de symboles (tree-sitter)</span></div>
-      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Serveur MCP stdio (9 outils)" data-en="MCP stdio server (9 tools)">Serveur MCP stdio (9 outils)</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Serveur MCP stdio (13 outils)" data-en="MCP stdio server (13 tools)">Serveur MCP stdio (13 outils)</span></div>
       <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="CI Windows / Linux / macOS" data-en="CI Windows / Linux / macOS">CI Windows / Linux / macOS</span></div>
       <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Snapshot JSON (.repolens/index.json)" data-en="JSON snapshot (.repolens/index.json)">Snapshot JSON (.repolens/index.json)</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Scripts d'installation (PowerShell / shell)" data-en="Install scripts (PowerShell / shell)">Scripts d'installation (PowerShell / shell)</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Serveur HTTP localhost + UI" data-en="HTTP localhost server + UI">Serveur HTTP localhost + UI</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Commande d'édition atomique" data-en="Atomic edit command">Commande d'édition atomique</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Watcher + réindexation incrémentale" data-en="Watcher + incremental reindex">Watcher + réindexation incrémentale</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="MCP auto-config Claude / Cursor / Codex" data-en="MCP auto-config Claude / Cursor / Codex">MCP auto-config Claude / Cursor / Codex</span></div>
     </div>
     <div class="roadmap-col">
       <h3 data-fr="🔜 En cours / Prévu" data-en="🔜 Upcoming">🔜 En cours / Prévu</h3>
-      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Scripts d'installation (PowerShell / shell)" data-en="Install scripts (PowerShell / shell)">Scripts d'installation (PowerShell / shell)</span></div>
-      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Serveur HTTP localhost" data-en="HTTP localhost server">Serveur HTTP localhost</span></div>
-      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Commande d'édition atomique" data-en="Atomic edit command">Commande d'édition atomique</span></div>
-      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Watcher + réindexation incrémentale" data-en="Watcher + incremental reindex">Watcher + réindexation incrémentale</span></div>
-      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Résolution de dépendances relatives TS/JS" data-en="TS/JS relative dep resolution">Résolution de dépendances relatives TS/JS</span></div>
-      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="MCP auto-config Claude / Cursor / Codex" data-en="MCP auto-config Claude / Cursor / Codex">MCP auto-config Claude / Cursor / Codex</span></div>
-      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Indexation parallèle" data-en="Parallel indexing">Indexation parallèle</span></div>
+      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Rapport perf pour gros dépôts" data-en="Performance report for large repositories">Rapport perf pour gros dépôts</span></div>
+      <div class="roadmap-item"><span class="ri-dot todo"></span><span class="ri-text" data-fr="Auto-config MCP plus robuste" data-en="More robust MCP auto-config">Auto-config MCP plus robuste</span></div>
     </div>
   </div>
 </section>
