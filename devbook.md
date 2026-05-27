@@ -291,6 +291,7 @@ Bench contre :
 - [x] Ajouter recherche par candidats trigram.
 - [x] Vérifier match réel après candidats.
 - [x] Ajouter commande `word`.
+- [x] Indexation parallèle des fichiers.
 - [x] Ajouter tests word/trigram.
 
 ### Phase 3: Sécurité
@@ -443,7 +444,7 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 Ordre recommandé :
 
 1. Ajouter build perf large repo.
-2. Ajouter parallel indexing.
-3. Ajouter snapshots mmap.
-4. Ajouter plus de langages.
-5. Ajouter polish UI.
+2. Ajouter snapshots mmap.
+3. Ajouter plus de langages.
+4. Ajouter polish UI.
+5. Ajouter perf report dans `bench`.

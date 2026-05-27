@@ -5,6 +5,7 @@ use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
@@ -47,6 +48,14 @@ pub struct FileEntry {
     pub hash: String,
 }
 
+struct IndexedFile {
+    entry: FileEntry,
+    words: BTreeSet<String>,
+    trigrams: BTreeSet<String>,
+    symbols: Vec<Symbol>,
+    deps: Option<FileDeps>,
+}
+
 impl ProjectIndex {
     pub fn build(root: &Path) -> Result<Self> {
         let root = canonical_utf8(root)?;
@@ -57,72 +66,25 @@ impl ProjectIndex {
         let mut symbol_list = Vec::new();
         let mut deps_list = Vec::new();
 
-        for path in scanner::source_files(root.as_std_path(), &config)? {
-            let bytes =
-                fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
-            if scanner::looks_binary(&bytes) {
-                continue;
-            }
+        let indexed = scanner::source_files(root.as_std_path(), &config)?
+            .into_par_iter()
+            .enumerate()
+            .map(|(id, path)| index_source_file(&root, id as FileId, &path))
+            .collect::<Result<Vec<_>>>()?;
 
-            let rel = path
-                .strip_prefix(root.as_std_path())
-                .with_context(|| format!("file outside root: {}", path.display()))?;
-            let Some(rel) = Utf8PathBuf::from_path_buf(rel.to_path_buf()).ok() else {
-                continue;
-            };
-
-            let id = files.len() as FileId;
-            let text = String::from_utf8_lossy(&bytes);
-            for word in search::extract_words(&text) {
+        for indexed in indexed.into_iter().flatten() {
+            let id = indexed.entry.id;
+            for word in indexed.words {
                 words.entry(word).or_default().insert(id);
             }
-            for trigram in search::extract_trigrams(&text) {
+            for trigram in indexed.trigrams {
                 trigrams.entry(trigram).or_default().insert(id);
             }
-            match rel.extension() {
-                Some("rs") => {
-                    symbol_list.extend(symbols::extract_rust_symbols(id, &rel, &text)?);
-                    deps_list.push(deps::extract_rust_deps(id, &rel, &text)?);
-                }
-                Some("js") | Some("mjs") | Some("cjs") => {
-                    symbol_list.extend(symbols::extract_javascript_symbols(id, &rel, &text)?);
-                    deps_list.push(deps::extract_ts_like_deps(id, &rel, &text)?);
-                }
-                Some("ts") | Some("mts") | Some("cts") => {
-                    symbol_list
-                        .extend(symbols::extract_typescript_symbols(id, &rel, &text, false)?);
-                    deps_list.push(deps::extract_ts_like_deps(id, &rel, &text)?);
-                }
-                Some("tsx") | Some("jsx") => {
-                    symbol_list.extend(symbols::extract_typescript_symbols(id, &rel, &text, true)?);
-                    deps_list.push(deps::extract_ts_like_deps(id, &rel, &text)?);
-                }
-                Some("py") | Some("pyw") => {
-                    symbol_list.extend(symbols::extract_python_symbols(id, &rel, &text)?);
-                    deps_list.push(deps::extract_python_deps(id, &rel, &text)?);
-                }
-                Some("go") => {
-                    symbol_list.extend(symbols::extract_go_symbols(id, &rel, &text)?);
-                    deps_list.push(deps::extract_go_deps(id, &rel, &text)?);
-                }
-                Some("php") => {
-                    symbol_list.extend(symbols::extract_php_symbols(id, &rel, &text)?);
-                    deps_list.push(deps::extract_php_deps(id, &rel, &text)?);
-                }
-                _ => {}
+            symbol_list.extend(indexed.symbols);
+            if let Some(deps) = indexed.deps {
+                deps_list.push(deps);
             }
-
-            let metadata = fs::metadata(&path)
-                .with_context(|| format!("failed to stat {}", path.display()))?;
-            files.push(FileEntry {
-                id,
-                path: rel,
-                bytes: bytes.len() as u64,
-                lines: text.lines().count() as u32,
-                line_offsets: line_offsets(&text),
-                mtime_ms: mtime_ms(&metadata),
-                hash: blake3::hash(&bytes).to_hex().to_string(),
-            });
+            files.push(indexed.entry);
         }
 
         files.sort_by(|a, b| a.path.cmp(&b.path));
@@ -253,6 +215,42 @@ fn extract_symbols(id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Vec<Sym
         Some("php") => symbols::extract_php_symbols(id, path, text),
         _ => Ok(Vec::new()),
     }
+}
+
+fn index_source_file(root: &Utf8PathBuf, id: FileId, path: &Path) -> Result<Option<IndexedFile>> {
+    let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
+    if scanner::looks_binary(&bytes) {
+        return Ok(None);
+    }
+
+    let rel = path
+        .strip_prefix(root.as_std_path())
+        .with_context(|| format!("file outside root: {}", path.display()))?;
+    let Some(rel) = Utf8PathBuf::from_path_buf(rel.to_path_buf()).ok() else {
+        return Ok(None);
+    };
+
+    let text = String::from_utf8_lossy(&bytes);
+    let metadata =
+        fs::metadata(path).with_context(|| format!("failed to stat {}", path.display()))?;
+    let symbols = extract_symbols(id, &rel, &text)?;
+    let deps = extract_deps(id, &rel, &text)?;
+
+    Ok(Some(IndexedFile {
+        entry: FileEntry {
+            id,
+            path: rel,
+            bytes: bytes.len() as u64,
+            lines: text.lines().count() as u32,
+            line_offsets: line_offsets(&text),
+            mtime_ms: mtime_ms(&metadata),
+            hash: blake3::hash(&bytes).to_hex().to_string(),
+        },
+        words: search::extract_words(&text),
+        trigrams: search::extract_trigrams(&text),
+        symbols,
+        deps,
+    }))
 }
 
 fn extract_deps(id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Option<FileDeps>> {

@@ -15,6 +15,7 @@ Implemented today:
 - Binary snapshot at `.repolens/index.bin` for faster reloads.
 - Snapshot metadata command/tool.
 - Word and trigram indexes for search.
+- Parallel file indexing.
 - Symbol extraction with tree-sitter for Rust, TypeScript, JavaScript, TSX/JSX, Python, Go, and PHP.
 - Import/dependency extraction for Rust, TS/JS, Python, Go, and PHP.
 - Relative TS/JS dependency resolution.
@@ -458,5 +459,4 @@ Next planned work:
 Longer term:
 
 - More languages.
-- Parallel indexing.
 - More robust MCP auto-config variants.
