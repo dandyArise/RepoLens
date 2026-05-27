@@ -23,7 +23,6 @@ Not implemented yet:
 
 - Install scripts.
 - HTTP local server.
-- Atomic edit command.
 - Watcher/incremental reindex.
 - Deep dependency resolution/reverse deps.
 
@@ -199,6 +198,27 @@ Measures index/search/symbol timings and compares search with `rg` if available.
 repolens bench . --query ProjectIndex --symbol ProjectIndex --limit 20
 ```
 
+### `edit`
+
+Applies a guarded line edit and immediately rebuilds `.repolens/index.json`.
+
+The current file hash is required. Get it from `tree`, `.repolens/index.json`, or MCP `repolens_tree`.
+
+```powershell
+repolens edit src/main.rs . --op replace --start 10 --end 12 --content "new text`n" --hash <current_hash>
+repolens edit src/main.rs . --op insert --start 20 --content "inserted line`n" --hash <current_hash>
+repolens edit src/main.rs . --op delete --start 30 --end 35 --hash <current_hash>
+```
+
+Safety rules:
+
+- refuses missing or stale hashes;
+- refuses path traversal;
+- refuses sensitive paths unless `allow_sensitive = true`;
+- refuses non-UTF-8 files;
+- writes through a temp file and atomic rename;
+- reindexes immediately after write.
+
 ### `mcp`
 
 Starts the MCP stdio server.
@@ -219,6 +239,7 @@ Implemented tools:
 - `repolens_outline`
 - `repolens_symbol`
 - `repolens_deps`
+- `repolens_edit`
 - `repolens_bundle`
 
 Example JSON-RPC call:
@@ -310,7 +331,6 @@ Next planned work:
 - TS/JS relative dependency resolution.
 - Release workflow with Windows/Linux/macOS binaries.
 - PowerShell and shell installers.
-- Atomic edit command.
 - Watcher and incremental reindex.
 - HTTP localhost server.
 

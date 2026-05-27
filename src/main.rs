@@ -2,6 +2,7 @@ mod bench;
 mod cli;
 mod config;
 mod deps;
+mod edit;
 mod index;
 mod mcp;
 mod pathing;
@@ -80,6 +81,20 @@ fn main() -> Result<()> {
             limit,
         } => {
             bench::run(&root, &query, &symbol, limit)?;
+        }
+        Command::Edit {
+            path,
+            root,
+            op,
+            start,
+            end,
+            content,
+            hash,
+        } => {
+            let result = edit::apply(&root, &path, op, start, end, content.as_deref(), &hash)?;
+            println!("path: {}", result.path);
+            println!("hash: {}", result.hash);
+            println!("lines: {}", result.lines);
         }
     }
 

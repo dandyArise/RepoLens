@@ -391,16 +391,16 @@ Bench contre :
 ### Phase 10: Edition
 
 - [ ] Ajouter `ropey`.
-- [ ] `replace lines`.
-- [ ] `insert before line`.
-- [ ] `delete lines`.
-- [ ] Vérifier hash/version avant write.
-- [ ] Ecriture fichier temporaire.
-- [ ] Rename atomique.
-- [ ] Réindexer fichier après edit.
-- [ ] Commande `edit`.
-- [ ] Tool MCP `repolens_edit`.
-- [ ] Tests edit ranges.
+- [x] `replace lines`.
+- [x] `insert before line`.
+- [x] `delete lines`.
+- [x] Vérifier hash/version avant write.
+- [x] Ecriture fichier temporaire.
+- [x] Rename atomique.
+- [x] Réindexer fichier après edit.
+- [x] Commande `edit`.
+- [x] Tool MCP `repolens_edit`.
+- [x] Tests edit ranges.
 
 ### Phase 11: Watcher
 
@@ -433,4 +433,4 @@ Ordre recommandé :
 2. Ajouter install shell Linux/macOS.
 3. Ajouter résolution TS/JS relative.
 4. Ajouter watcher incrémental.
-5. Ajouter édition atomique.
+5. Ajouter HTTP local.

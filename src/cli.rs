@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use camino::Utf8PathBuf;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(name = "repolens")]
@@ -81,4 +81,26 @@ pub enum Command {
         #[arg(short, long, default_value_t = 20)]
         limit: usize,
     },
+    Edit {
+        path: Utf8PathBuf,
+        #[arg(default_value = ".")]
+        root: PathBuf,
+        #[arg(long, value_enum)]
+        op: EditOpArg,
+        #[arg(long)]
+        start: usize,
+        #[arg(long)]
+        end: Option<usize>,
+        #[arg(long)]
+        content: Option<String>,
+        #[arg(long)]
+        hash: String,
+    },
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum EditOpArg {
+    Replace,
+    Insert,
+    Delete,
 }

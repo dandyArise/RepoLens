@@ -6,8 +6,9 @@ use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::cli::EditOpArg;
 use crate::index::ProjectIndex;
-use crate::{deps, read, search, snapshot, symbols};
+use crate::{deps, edit, read, search, snapshot, symbols};
 
 #[derive(Debug, Deserialize)]
 struct Request {
@@ -148,6 +149,11 @@ fn tools() -> Vec<Value> {
             "Return imports for one indexed file.",
             json!({"type": "object", "required": ["path"], "properties": {"path": {"type": "string"}}}),
         ),
+        tool(
+            "repolens_edit",
+            "Apply a guarded line edit. Requires current file hash.",
+            json!({"type": "object", "required": ["path", "op", "start", "hash"], "properties": {"path": {"type": "string"}, "op": {"type": "string", "enum": ["replace", "insert", "delete"]}, "start": {"type": "integer"}, "end": {"type": "integer"}, "content": {"type": "string"}, "hash": {"type": "string"}}}),
+        ),
     ]
 }
 
@@ -229,6 +235,23 @@ fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value>
             let path = Utf8PathBuf::from(get_str(&args, "path")?);
             json!(deps::deps_for_file(index, &path))
         }
+        "repolens_edit" => {
+            let path = Utf8PathBuf::from(get_str(&args, "path")?);
+            let op = parse_edit_op(get_str(&args, "op")?)?;
+            let start = get_required_usize(&args, "start")?;
+            let end = get_usize(&args, "end");
+            let content = args.get("content").and_then(Value::as_str);
+            let hash = get_str(&args, "hash")?;
+            json!(edit::apply(
+                index.root.as_std_path(),
+                &path,
+                op,
+                start,
+                end,
+                content,
+                hash
+            )?)
+        }
         "repolens_bundle" => {
             let ops = args
                 .get("ops")
@@ -265,6 +288,19 @@ fn get_usize(value: &Value, key: &str) -> Option<usize> {
         .get(key)
         .and_then(Value::as_u64)
         .and_then(|value| usize::try_from(value).ok())
+}
+
+fn get_required_usize(value: &Value, key: &str) -> Result<usize> {
+    get_usize(value, key).ok_or_else(|| anyhow!("missing '{key}'"))
+}
+
+fn parse_edit_op(raw: &str) -> Result<EditOpArg> {
+    match raw {
+        "replace" => Ok(EditOpArg::Replace),
+        "insert" => Ok(EditOpArg::Insert),
+        "delete" => Ok(EditOpArg::Delete),
+        _ => Err(anyhow!("invalid edit op")),
+    }
 }
 
 #[cfg(test)]
