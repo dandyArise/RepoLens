@@ -1,12 +1,32 @@
-# RepoLens
+# RepoLens 🔎
 
 Fast local codebase index for AI agents.
 
-RepoLens scans a repository, builds compact local indexes, and exposes code navigation tools through a CLI, an MCP stdio server, and a localhost HTTP API. It is designed to be cross-platform from the start: Windows, Linux, macOS, and Unix-like environments.
+RepoLens scans a repository, builds compact local indexes, and exposes code navigation tools through a CLI, an MCP stdio server, and a localhost HTTP API/UI. It is designed to be cross-platform from the start: Windows, Linux, macOS, and Unix-like environments.
+
+## Links
+
+- 🚀 [Latest release](https://github.com/dandyArise/RepoLens/releases/latest)
+- 📦 [v0.1.0 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.0)
+- ⚙️ [GitHub Actions builds](https://github.com/dandyArise/RepoLens/actions)
+- 🧩 [Windows installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.ps1)
+- 🧩 [Linux/macOS installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.sh)
+
+## Highlights
+
+- ⚡ Fast Rust CLI with parallel indexing.
+- 🧠 MCP stdio server for AI agents.
+- 🖥️ Localhost HTTP API and optional UI.
+- 🧭 Symbols, search, outlines, deps, reverse deps, and guarded reads.
+- ✍️ Safe edit tool with hash guard, atomic write, and immediate reindex.
+- 👀 Watch mode with incremental updates and change tracking.
+- 🧰 Auto-config for Codex, Claude Desktop, and Cursor.
+- 🔐 Sensitive files are blocked by default.
+- 🌍 Release binaries for Windows, Linux, and macOS.
 
 ## Status
 
-Implemented today:
+Implemented:
 
 - Cross-platform Rust CLI.
 - `.gitignore`-aware scanner.
@@ -25,57 +45,16 @@ Implemented today:
 - Optional localhost UI at `/`.
 - Watch mode with change sequence tracking and incremental file updates.
 - Basic benchmark command with optional `rg` comparison.
-- CI for Windows, Linux, and macOS.
+- Release builds for Windows, Linux, and macOS.
+- CI for Windows, Linux, and macOS with Rust cache.
 
 Not implemented yet:
 
 - perf report for large repositories.
 
-## Install From Source
+## Install From Release 📦
 
-Requirements:
-
-- Rust stable.
-- `rg` optional, only used by `bench` for comparison.
-
-```powershell
-git clone https://github.com/dandyArise/RepoLens.git
-cd RepoLens
-cargo build --release
-```
-
-Binary:
-
-```powershell
-.\target\release\repolens.exe --help
-```
-
-## Release Builds
-
-Release workflow targets:
-
-- `repolens-windows-x86_64.zip`
-- `repolens-linux-x86_64.tar.gz`
-- `repolens-linux-arm64.tar.gz`
-- `repolens-darwin-x86_64.tar.gz`
-- `repolens-darwin-arm64.tar.gz`
-
-Each archive is accompanied by a `.sha256` file. Tagged releases publish a combined `checksums.sha256`.
-
-To create a release:
-
-```powershell
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-During development:
-
-```powershell
-cargo run -- --help
-```
-
-## Install From Release
+Download binaries from [GitHub Releases](https://github.com/dandyArise/RepoLens/releases/latest).
 
 Windows PowerShell:
 
@@ -94,7 +73,7 @@ Defaults:
 - Windows installs to `%USERPROFILE%\bin`
 - Linux/macOS installs to `$HOME/.local/bin`
 - checksums are verified before copying the binary
-- supported release assets: Windows x86_64, Linux x86_64/arm64, macOS x86_64/arm64
+- supported assets: Windows x86_64, Linux x86_64/arm64, macOS x86_64/arm64
 
 Installer options:
 
@@ -119,7 +98,53 @@ repolens --help
 repolens init . --target codex
 ```
 
-## Quick Start
+## Install From Source 🛠️
+
+Requirements:
+
+- Rust stable.
+- `rg` optional, only used by `bench` for comparison.
+
+```powershell
+git clone https://github.com/dandyArise/RepoLens.git
+cd RepoLens
+cargo build --release
+```
+
+Binary:
+
+```powershell
+.\target\release\repolens.exe --help
+```
+
+## Release Builds 🚀
+
+Release workflow targets:
+
+- `repolens-windows-x86_64.zip`
+- `repolens-linux-x86_64.tar.gz`
+- `repolens-linux-arm64.tar.gz`
+- `repolens-darwin-x86_64.tar.gz`
+- `repolens-darwin-arm64.tar.gz`
+
+Each archive is accompanied by a `.sha256` file. Tagged releases publish a combined `checksums.sha256`.
+
+Published assets are available on the [latest release page](https://github.com/dandyArise/RepoLens/releases/latest).
+
+To create a release:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+During development:
+
+```powershell
+cargo run -- --help
+```
+
+## Quick Start ⚡
 
 ```powershell
 cargo run -- index .
@@ -132,7 +157,7 @@ cargo run -- deps src/main.rs .
 cargo run -- bench . --query ProjectIndex --symbol ProjectIndex
 ```
 
-## CLI Commands
+## CLI Commands 🧰
 
 ### `index`
 
@@ -365,7 +390,7 @@ Current targets:
 repolens mcp <repo-root>
 ```
 
-## MCP Tools
+## MCP Tools 🤖
 
 Implemented tools:
 
@@ -395,7 +420,7 @@ Bundle example:
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"repolens_bundle","arguments":{"ops":[{"tool":"repolens_status","arguments":{}},{"tool":"repolens_search","arguments":{"query":"ProjectIndex","limit":3}}]}}}
 ```
 
-## Configuration
+## Configuration ⚙️
 
 RepoLens reads `.repolensrc.toml` from the repository root when present.
 
@@ -417,7 +442,7 @@ An example file is included:
 copy .repolensrc.example.toml .repolensrc.toml
 ```
 
-## Safety Defaults
+## Safety Defaults 🔐
 
 RepoLens skips heavy or generated folders:
 
@@ -445,7 +470,7 @@ RepoLens blocks sensitive names by default:
 
 Set `allow_sensitive = true` only for controlled local testing.
 
-## Development
+## Development 🧪
 
 ```powershell
 cargo fmt --check
@@ -470,11 +495,11 @@ Current test coverage includes:
 - binary snapshot save/load
 - MCP request handling
 
-## Roadmap
+## Roadmap 🗺️
 
 Next planned work:
 
-- mmap snapshot loading.
+- perf report for large repositories.
 
 Longer term:
 
