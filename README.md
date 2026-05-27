@@ -21,13 +21,13 @@ Implemented today:
 - Forward and reverse dependency graph for resolved imports.
 - MCP stdio server with compact tools.
 - Localhost HTTP API.
-- Watch mode with change sequence tracking.
+- Watch mode with change sequence tracking and incremental file updates.
 - Basic benchmark command with optional `rg` comparison.
 - CI for Windows, Linux, and macOS.
 
 Not implemented yet:
 
-- Fine-grained incremental reindex.
+- mmap snapshot loading.
 
 ## Install From Source
 
@@ -304,7 +304,7 @@ repolens snapshot .
 
 ### `watch`, `changes`, `hot`
 
-`watch` keeps `.repolens/index.json` fresh and writes `.repolens/changes.json`.
+`watch` keeps `.repolens/index.json` fresh and writes `.repolens/changes.json`. Modified, created, and removed files are applied incrementally when possible.
 
 ```powershell
 repolens watch .
@@ -449,7 +449,7 @@ Current test coverage includes:
 
 Next planned work:
 
-- Fine-grained incremental reindex.
+- mmap snapshot loading.
 
 Longer term:
 

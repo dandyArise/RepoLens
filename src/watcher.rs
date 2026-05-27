@@ -70,8 +70,7 @@ fn watch_notify(root: &Utf8Path) -> Result<()> {
     for result in rx {
         match result {
             Ok(event) if should_handle_event(root, &event) => {
-                let index = ProjectIndex::build(root.as_std_path())?;
-                snapshot::save(&index)?;
+                let index = reindex_event_paths(root, &event.paths)?;
                 let state = record_event(root, &event)?;
                 println!("sequence: {} files: {}", state.sequence, index.files.len());
             }
@@ -95,13 +94,50 @@ fn watch_polling(root: &Utf8Path, interval_ms: u64) -> Result<()> {
         let current = file_signature(root)?;
         let changes = diff_signatures(&previous, &current);
         if !changes.is_empty() {
-            let index = ProjectIndex::build(root.as_std_path())?;
-            snapshot::save(&index)?;
+            let index = reindex_poll_changes(root, &changes)?;
             let state = record_poll_changes(root, changes)?;
             println!("sequence: {} files: {}", state.sequence, index.files.len());
         }
         previous = current;
     }
+}
+
+fn reindex_event_paths(root: &Utf8Path, paths: &[std::path::PathBuf]) -> Result<ProjectIndex> {
+    let mut index = snapshot::load_or_build(root.as_std_path())?;
+    for path in paths.iter().filter(|path| !is_ignored_path(root, path)) {
+        let Some(relative) = relative_utf8(root, path) else {
+            return rebuild(root);
+        };
+        if path.is_file() {
+            index.upsert_file(&relative)?;
+        } else if index.file_by_path(&relative).is_some() {
+            index.remove_file(&relative)?;
+        } else {
+            return rebuild(root);
+        }
+    }
+    snapshot::save(&index)?;
+    Ok(index)
+}
+
+fn reindex_poll_changes(root: &Utf8Path, changes: &[ChangeRecord]) -> Result<ProjectIndex> {
+    let mut index = snapshot::load_or_build(root.as_std_path())?;
+    for change in changes {
+        let relative = Utf8PathBuf::from(&change.path);
+        match change.kind.as_str() {
+            "create" | "modify" => index.upsert_file(&relative)?,
+            "remove" => index.remove_file(&relative)?,
+            _ => return rebuild(root),
+        }
+    }
+    snapshot::save(&index)?;
+    Ok(index)
+}
+
+fn rebuild(root: &Utf8Path) -> Result<ProjectIndex> {
+    let index = ProjectIndex::build(root.as_std_path())?;
+    snapshot::save(&index)?;
+    Ok(index)
 }
 
 pub fn print_changes(root: &Path) -> Result<()> {
@@ -233,6 +269,11 @@ fn display_relative(root: &Utf8Path, path: &Path) -> String {
         .unwrap_or_else(|_| relative.to_string_lossy().to_string())
 }
 
+fn relative_utf8(root: &Utf8Path, path: &Path) -> Option<Utf8PathBuf> {
+    let relative = path.strip_prefix(root.as_std_path()).ok()?;
+    Utf8PathBuf::from_path_buf(relative.to_path_buf()).ok()
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -253,7 +294,7 @@ fn metadata_mtime_ms(metadata: &fs::Metadata) -> u64 {
 mod tests {
     use notify::{Event, EventKind};
 
-    use super::{diff_signatures, read_state, record_event};
+    use super::{diff_signatures, read_state, record_event, reindex_poll_changes};
 
     #[test]
     fn records_watch_sequence() {
@@ -297,5 +338,61 @@ mod tests {
                 .iter()
                 .any(|change| change.path == "c.rs" && change.kind == "create")
         );
+    }
+
+    #[test]
+    fn polling_modify_refreshes_existing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).unwrap();
+        std::fs::write(temp.path().join("main.rs"), "fn before() {}\n").unwrap();
+        let index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        crate::snapshot::save(&index).unwrap();
+
+        std::fs::write(temp.path().join("main.rs"), "fn after() {}\n").unwrap();
+        reindex_poll_changes(
+            &root,
+            &[super::ChangeRecord {
+                path: "main.rs".to_string(),
+                kind: "modify".to_string(),
+            }],
+        )
+        .unwrap();
+        let loaded = crate::snapshot::load_or_build(temp.path()).unwrap();
+
+        assert!(loaded.symbols.iter().any(|symbol| symbol.name == "after"));
+        assert!(!loaded.symbols.iter().any(|symbol| symbol.name == "before"));
+    }
+
+    #[test]
+    fn polling_create_and_remove_update_index() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).unwrap();
+        std::fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
+        let index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        crate::snapshot::save(&index).unwrap();
+
+        std::fs::write(temp.path().join("added.rs"), "fn added() {}\n").unwrap();
+        reindex_poll_changes(
+            &root,
+            &[super::ChangeRecord {
+                path: "added.rs".to_string(),
+                kind: "create".to_string(),
+            }],
+        )
+        .unwrap();
+        let loaded = crate::snapshot::load_or_build(temp.path()).unwrap();
+        assert!(loaded.symbols.iter().any(|symbol| symbol.name == "added"));
+
+        std::fs::remove_file(temp.path().join("added.rs")).unwrap();
+        reindex_poll_changes(
+            &root,
+            &[super::ChangeRecord {
+                path: "added.rs".to_string(),
+                kind: "remove".to_string(),
+            }],
+        )
+        .unwrap();
+        let loaded = crate::snapshot::load_or_build(temp.path()).unwrap();
+        assert!(!loaded.symbols.iter().any(|symbol| symbol.name == "added"));
     }
 }

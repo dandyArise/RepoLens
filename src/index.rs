@@ -142,6 +142,131 @@ impl ProjectIndex {
     pub fn file_by_path(&self, path: &Utf8PathBuf) -> Option<&FileEntry> {
         self.files.iter().find(|file| file.path == *path)
     }
+
+    pub fn refresh_file(&mut self, path: &Utf8PathBuf) -> Result<()> {
+        self.upsert_file(path)
+    }
+
+    pub fn upsert_file(&mut self, path: &Utf8PathBuf) -> Result<()> {
+        let id = self
+            .file_by_path(path)
+            .map(|file| file.id)
+            .unwrap_or_else(|| self.files.iter().map(|file| file.id).max().unwrap_or(0) + 1);
+        let full_path = self.root.join(path);
+        let bytes =
+            fs::read(&full_path).with_context(|| format!("failed to read {}", full_path))?;
+        if scanner::looks_binary(&bytes) {
+            *self = Self::build(self.root.as_std_path())?;
+            return Ok(());
+        }
+
+        let text = String::from_utf8_lossy(&bytes);
+        let metadata =
+            fs::metadata(&full_path).with_context(|| format!("failed to stat {path}"))?;
+        let next_file = FileEntry {
+            id,
+            path: path.clone(),
+            bytes: bytes.len() as u64,
+            lines: text.lines().count() as u32,
+            line_offsets: line_offsets(&text),
+            mtime_ms: mtime_ms(&metadata),
+            hash: blake3::hash(&bytes).to_hex().to_string(),
+        };
+
+        remove_file_id(&mut self.words, id);
+        remove_file_id(&mut self.trigrams, id);
+        self.symbols.retain(|symbol| symbol.file_id != id);
+        self.deps.retain(|deps| deps.file_id != id);
+
+        for word in search::extract_words(&text) {
+            push_unique(self.words.entry(word).or_default(), id);
+        }
+        for trigram in search::extract_trigrams(&text) {
+            push_unique(self.trigrams.entry(trigram).or_default(), id);
+        }
+        self.symbols.extend(extract_symbols(id, path, &text)?);
+        if let Some(file_deps) = extract_deps(id, path, &text)? {
+            self.deps.push(file_deps);
+        }
+
+        if let Some(file) = self.files.iter_mut().find(|file| file.id == id) {
+            *file = next_file;
+        } else {
+            self.files.push(next_file);
+        }
+        self.rebuild_derived_indexes();
+        Ok(())
+    }
+
+    pub fn remove_file(&mut self, path: &Utf8PathBuf) -> Result<()> {
+        let Some(file) = self.file_by_path(path) else {
+            return Ok(());
+        };
+        let id = file.id;
+        self.files.retain(|file| file.id != id);
+        remove_file_id(&mut self.words, id);
+        remove_file_id(&mut self.trigrams, id);
+        self.symbols.retain(|symbol| symbol.file_id != id);
+        self.deps.retain(|deps| deps.file_id != id);
+        for deps in &mut self.deps {
+            for import in &mut deps.imports {
+                if import.resolved_file_id == Some(id) {
+                    import.resolved_file_id = None;
+                    import.resolved_path = None;
+                }
+            }
+        }
+        self.rebuild_derived_indexes();
+        Ok(())
+    }
+
+    fn rebuild_derived_indexes(&mut self) {
+        self.files.sort_by(|a, b| a.path.cmp(&b.path));
+        deps::resolve_relative_ts_js_imports(&mut self.deps, &self.files);
+        let (deps_forward, deps_reverse) = deps::build_graph(&self.deps);
+        self.deps_forward = deps_forward;
+        self.deps_reverse = deps_reverse;
+        self.symbols_by_name = index_symbols_by_name(&self.symbols);
+    }
+}
+
+fn extract_symbols(id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Vec<Symbol>> {
+    match path.extension() {
+        Some("rs") => symbols::extract_rust_symbols(id, path, text),
+        Some("js") | Some("mjs") | Some("cjs") => {
+            symbols::extract_javascript_symbols(id, path, text)
+        }
+        Some("ts") | Some("mts") | Some("cts") => {
+            symbols::extract_typescript_symbols(id, path, text, false)
+        }
+        Some("tsx") | Some("jsx") => symbols::extract_typescript_symbols(id, path, text, true),
+        Some("py") | Some("pyw") => symbols::extract_python_symbols(id, path, text),
+        _ => Ok(Vec::new()),
+    }
+}
+
+fn extract_deps(id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Option<FileDeps>> {
+    match path.extension() {
+        Some("rs") => deps::extract_rust_deps(id, path, text).map(Some),
+        Some("js") | Some("mjs") | Some("cjs") | Some("ts") | Some("mts") | Some("cts")
+        | Some("tsx") | Some("jsx") => deps::extract_ts_like_deps(id, path, text).map(Some),
+        Some("py") | Some("pyw") => deps::extract_python_deps(id, path, text).map(Some),
+        _ => Ok(None),
+    }
+}
+
+fn remove_file_id(index: &mut BTreeMap<String, Vec<FileId>>, id: FileId) {
+    index.retain(|_, ids| {
+        ids.retain(|existing| *existing != id);
+        !ids.is_empty()
+    });
+}
+
+fn push_unique(ids: &mut Vec<FileId>, id: FileId) {
+    if !ids.contains(&id) {
+        ids.push(id);
+        ids.sort_unstable();
+    }
 }
 
 fn index_symbols_by_name(symbols: &[Symbol]) -> BTreeMap<String, Vec<SymbolId>> {
@@ -269,5 +394,56 @@ mod tests {
 
         assert_eq!(index.deps_forward.get(&app), Some(&vec![util]));
         assert_eq!(index.deps_reverse.get(&util), Some(&vec![app]));
+    }
+
+    #[test]
+    fn refreshes_one_file_indexes() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("main.rs"), "fn old_name() {}\n").unwrap();
+        fs::write(temp.path().join("other.rs"), "fn untouched() {}\n").unwrap();
+        let mut index = ProjectIndex::build(temp.path()).unwrap();
+        let main_id = index
+            .file_by_path(&Utf8PathBuf::from("main.rs"))
+            .unwrap()
+            .id;
+
+        fs::write(temp.path().join("main.rs"), "fn new_name() {}\n").unwrap();
+        index.refresh_file(&Utf8PathBuf::from("main.rs")).unwrap();
+
+        assert_eq!(
+            index
+                .file_by_path(&Utf8PathBuf::from("main.rs"))
+                .unwrap()
+                .id,
+            main_id
+        );
+        assert!(index.symbols.iter().any(|symbol| symbol.name == "new_name"));
+        assert!(!index.symbols.iter().any(|symbol| symbol.name == "old_name"));
+        assert!(index.words.contains_key("new_name"));
+        assert!(!index.words.contains_key("old_name"));
+        assert!(
+            index
+                .symbols
+                .iter()
+                .any(|symbol| symbol.name == "untouched")
+        );
+    }
+
+    #[test]
+    fn upserts_and_removes_files_incrementally() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
+        let mut index = ProjectIndex::build(temp.path()).unwrap();
+
+        fs::write(temp.path().join("new.rs"), "fn added() {}\n").unwrap();
+        index.upsert_file(&Utf8PathBuf::from("new.rs")).unwrap();
+
+        assert!(index.file_by_path(&Utf8PathBuf::from("new.rs")).is_some());
+        assert!(index.symbols.iter().any(|symbol| symbol.name == "added"));
+
+        index.remove_file(&Utf8PathBuf::from("new.rs")).unwrap();
+
+        assert!(index.file_by_path(&Utf8PathBuf::from("new.rs")).is_none());
+        assert!(!index.symbols.iter().any(|symbol| symbol.name == "added"));
     }
 }

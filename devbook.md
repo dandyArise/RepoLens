@@ -418,7 +418,8 @@ Bench contre :
 - [x] Commande `watch`.
 - [x] Commande `changes`.
 - [x] Commande `hot`.
-- [ ] Réindex incrémental fin.
+- [x] Réindex incrémental des fichiers modifiés.
+- [x] Réindex incrémental créations/suppressions.
 - [x] Tool MCP `repolens_changes`.
 - [x] Tests watcher.
 
@@ -439,8 +440,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter réindex incrémental fin.
-2. Ajouter parsers Go/PHP.
-3. Ajouter UI HTTP optionnelle.
-4. Ajouter build perf large repo.
-5. Ajouter snapshots mmap.
+1. Ajouter parsers Go/PHP.
+2. Ajouter UI HTTP optionnelle.
+3. Ajouter build perf large repo.
+4. Ajouter snapshots mmap.
+5. Ajouter parallel indexing.

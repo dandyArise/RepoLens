@@ -7,7 +7,6 @@ use serde::Serialize;
 
 use crate::cli::EditOpArg;
 use crate::config::Config;
-use crate::index::ProjectIndex;
 use crate::pathing::{canonical_utf8, safe_join};
 use crate::security;
 use crate::snapshot;
@@ -51,7 +50,8 @@ pub fn apply(
     let next_hash = blake3::hash(next.as_bytes()).to_hex().to_string();
 
     atomic_write(&target, next.as_bytes())?;
-    let index = ProjectIndex::build(root.as_std_path())?;
+    let mut index = snapshot::load_or_build(root.as_std_path())?;
+    index.refresh_file(&path.to_path_buf())?;
     snapshot::save(&index)?;
 
     Ok(EditResult {
