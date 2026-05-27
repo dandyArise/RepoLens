@@ -412,7 +412,7 @@ Bench contre :
 ### Phase 11: Watcher
 
 - [x] Ajouter `notify`.
-- [ ] Fallback polling.
+- [x] Fallback polling.
 - [x] Sequence number global.
 - [x] Commande `watch`.
 - [x] Commande `changes`.
@@ -438,8 +438,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter fallback polling watcher.
-2. Ajouter documentation installation.
-3. Ajouter tests sécurité Windows/Linux.
-4. Ajouter réindex incrémental fin.
-5. Ajouter snapshots binaires plus rapides.
+1. Ajouter documentation installation.
+2. Ajouter tests sécurité Windows/Linux.
+3. Ajouter réindex incrémental fin.
+4. Ajouter snapshots binaires plus rapides.
+5. Ajouter fixtures Rust/TS/Windows paths.

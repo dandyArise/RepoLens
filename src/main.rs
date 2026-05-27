@@ -113,8 +113,12 @@ fn main() -> Result<()> {
         Command::Init { target, root } => {
             init::run(target, &root)?;
         }
-        Command::Watch { root } => {
-            watcher::watch(&root)?;
+        Command::Watch {
+            root,
+            poll,
+            interval_ms,
+        } => {
+            watcher::watch(&root, poll, interval_ms)?;
         }
         Command::Changes { root } => {
             watcher::print_changes(&root)?;

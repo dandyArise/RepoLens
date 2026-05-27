@@ -293,6 +293,7 @@ repolens snapshot .
 
 ```powershell
 repolens watch .
+repolens watch . --poll --interval-ms 1000
 repolens changes .
 repolens hot . --limit 10
 ```

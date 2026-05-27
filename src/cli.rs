@@ -122,6 +122,10 @@ pub enum Command {
     Watch {
         #[arg(default_value = ".")]
         root: PathBuf,
+        #[arg(long)]
+        poll: bool,
+        #[arg(long, default_value_t = 1000)]
+        interval_ms: u64,
     },
     Changes {
         #[arg(default_value = ".")]
