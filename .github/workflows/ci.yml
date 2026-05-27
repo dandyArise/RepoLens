@@ -23,3 +23,16 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      - run: cargo build --release --locked
+      - name: Smoke release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="target/release/repolens"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            bin="target/release/repolens.exe"
+          fi
+          "$bin" --help
+          "$bin" index .
+          "$bin" status .
+          "$bin" bench . --query ProjectIndex --symbol ProjectIndex --limit 1 --json

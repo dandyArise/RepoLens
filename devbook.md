@@ -333,6 +333,7 @@ Bench contre :
 - [x] Build release Linux arm64.
 - [x] Build release macOS x86_64.
 - [x] Build release macOS arm64.
+- [x] Smoke tests release binary.
 
 ### Phase 6: Symboles
 
@@ -448,4 +449,4 @@ Ordre recommandé :
 2. Ajouter plus de langages.
 3. Ajouter polish UI.
 4. Ajouter packaging install avec auto-init.
-5. Ajouter release smoke tests.
+5. Ajouter CI cache Rust.
