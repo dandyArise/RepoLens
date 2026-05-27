@@ -62,10 +62,22 @@ Windows PowerShell:
 iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.ps1 -UseBasicParsing | iex
 ```
 
+Update later:
+
+```powershell
+iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.ps1 -UseBasicParsing | iex
+```
+
 Linux/macOS:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.sh | sh
+```
+
+Update later:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.sh | env REPOLENS_ACTION=update sh
 ```
 
 Defaults:
@@ -95,6 +107,61 @@ Check or disable later:
 ```powershell
 repolens mcp-status --target all
 repolens disable --target codex
+```
+
+## Troubleshooting 🧯
+
+### `repolens` is not recognized on Windows
+
+Close and reopen PowerShell, then run:
+
+```powershell
+repolens --help
+```
+
+If it still fails, run with the full path:
+
+```powershell
+& "$env:USERPROFILE\bin\repolens.exe" --help
+```
+
+### I installed it, but the AI client does not see RepoLens
+
+Run `init` from the project folder, then restart the AI client:
+
+```powershell
+cd <your-project-folder>
+repolens init . --target codex
+repolens mcp-status --target codex
+```
+
+For all supported clients:
+
+```powershell
+repolens init . --target all
+repolens mcp-status --target all
+```
+
+### I ran `init` from the wrong folder
+
+Run it again from the correct project folder. RepoLens will replace its own MCP entry:
+
+```powershell
+cd <correct-project-folder>
+repolens init . --target codex
+```
+
+### Disable RepoLens without uninstalling it
+
+```powershell
+repolens disable --target codex
+```
+
+### Uninstall RepoLens
+
+```powershell
+iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.ps1 -OutFile "$env:TEMP\install-repolens.ps1"
+& "$env:TEMP\install-repolens.ps1" -Action uninstall
 ```
 
 ## Installer Options
