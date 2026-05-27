@@ -24,6 +24,28 @@ RepoLens scans a repository, builds compact local indexes, and exposes code navi
 - 🔐 Sensitive files are blocked by default.
 - 🌍 Release binaries for Windows, Linux, and macOS.
 
+## What AI Agents Can Do With RepoLens 🤖
+
+RepoLens gives an AI agent a fast map of your project before it starts editing.
+
+Without RepoLens, an agent often has to open many files, run broad searches, and spend context on code that may not matter. With RepoLens, the agent can ask targeted questions first:
+
+- Where is this function, class, route, or config key defined?
+- What files mention this word or identifier?
+- What are the important symbols inside this file?
+- What does this file import?
+- Which files depend on this file?
+- What changed since the index was built?
+- Can I read only the exact lines I need?
+
+That helps the agent use fewer tokens, avoid noisy file reads, and make safer edits. RepoLens does not replace the agent. It gives the agent better local navigation tools so it can understand the repository faster.
+
+Typical agent workflow:
+
+```text
+search -> inspect symbols -> read focused lines -> check dependencies -> edit with hash guard
+```
+
 ## Status
 
 Implemented:
