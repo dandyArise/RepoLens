@@ -325,6 +325,7 @@ Bench contre :
 - [x] GitHub Actions `windows-latest`.
 - [x] GitHub Actions `ubuntu-latest`.
 - [x] GitHub Actions `macos-latest`.
+- [x] Cache Rust GitHub Actions.
 - [x] `cargo fmt --check`.
 - [x] `cargo clippy`.
 - [x] `cargo test`.
@@ -459,6 +460,6 @@ Ordre recommandé :
 
 1. Ajouter build perf large repo.
 2. Ajouter polish UI.
-3. Ajouter CI cache Rust.
-4. Ajouter installer tests CI.
+3. Ajouter installer tests CI.
+4. Ajouter release notes auto.
 5. Ajouter langages restants via strategy compatible.
