@@ -44,6 +44,10 @@ fn main() -> Result<()> {
             println!("symbol names: {}", index.symbols_by_name.len());
             println!("deps files: {}", index.deps.len());
         }
+        Command::Snapshot { root } => {
+            let index = snapshot::load_or_build(&root)?;
+            snapshot::print_info(&index);
+        }
         Command::Search { query, root, limit } => {
             let index = snapshot::load_or_build(&root)?;
             search::search(&index, &query, limit)?;

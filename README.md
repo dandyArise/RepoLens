@@ -12,6 +12,7 @@ Implemented today:
 - `.gitignore`-aware scanner.
 - Safe defaults for sensitive files.
 - JSON snapshot at `.repolens/index.json`.
+- Snapshot metadata command/tool.
 - Word and trigram indexes for search.
 - Symbol extraction with tree-sitter for Rust, TypeScript, JavaScript, TSX/JSX, and Python.
 - Import/dependency extraction for Rust, TS/JS, and Python.
@@ -253,6 +254,14 @@ Starts the MCP stdio server.
 repolens mcp .
 ```
 
+### `snapshot`
+
+Prints `.repolens/index.json` metadata.
+
+```powershell
+repolens snapshot .
+```
+
 ### `watch`, `changes`, `hot`
 
 `watch` keeps `.repolens/index.json` fresh and writes `.repolens/changes.json`.
@@ -295,6 +304,7 @@ repolens mcp <repo-root>
 Implemented tools:
 
 - `repolens_status`
+- `repolens_snapshot`
 - `repolens_tree`
 - `repolens_search`
 - `repolens_word`

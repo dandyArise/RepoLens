@@ -367,7 +367,7 @@ Bench contre :
 - [x] Tool `repolens_read`.
 - [x] Tool `repolens_word`.
 - [x] Tool `repolens_status`.
-- [ ] Tool `repolens_snapshot`.
+- [x] Tool `repolens_snapshot`.
 - [x] Tool `repolens_bundle`.
 - [x] Tool `repolens_outline`.
 - [x] Tool `repolens_symbol`.
@@ -435,6 +435,6 @@ Ordre recommandé :
 
 1. Ajouter HTTP local.
 2. Ajouter Linux arm64 release.
-3. Ajouter `repolens_snapshot`.
-4. Ajouter fallback polling watcher.
-5. Ajouter documentation installation.
+3. Ajouter fallback polling watcher.
+4. Ajouter documentation installation.
+5. Ajouter tests sécurité Windows/Linux.

@@ -25,6 +25,10 @@ pub enum Command {
         #[arg(default_value = ".")]
         root: PathBuf,
     },
+    Snapshot {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
     Search {
         query: String,
         #[arg(default_value = ".")]

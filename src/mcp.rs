@@ -110,6 +110,11 @@ fn tools() -> Vec<Value> {
             json!({"type": "object", "properties": {}}),
         ),
         tool(
+            "repolens_snapshot",
+            "Return snapshot path and metadata.",
+            json!({"type": "object", "properties": {}}),
+        ),
+        tool(
             "repolens_tree",
             "List indexed files.",
             json!({"type": "object", "properties": {"limit": {"type": "integer"}}}),
@@ -205,6 +210,7 @@ fn call_tool_raw(index: &ProjectIndex, name: &str, args: Value) -> Result<Value>
             "deps_forward": index.deps_forward.len(),
             "deps_reverse": index.deps_reverse.len()
         }),
+        "repolens_snapshot" => json!(snapshot::info(index)),
         "repolens_tree" => {
             let limit = get_usize(&args, "limit").unwrap_or(200);
             json!(index.files.iter().take(limit).map(|file| {
