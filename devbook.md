@@ -349,7 +349,7 @@ Bench contre :
 ### Phase 7: Dépendances
 
 - [x] Modèle `ImportRef`.
-- [ ] Résolution TS/JS relative.
+- [x] Résolution TS/JS relative.
 - [x] Résolution Rust basique.
 - [x] Résolution Python best-effort.
 - [ ] Résolution Go best-effort.
@@ -429,8 +429,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter résolution TS/JS relative.
-2. Ajouter watcher incrémental.
+1. Ajouter watcher incrémental.
+2. Ajouter reverse deps.
 3. Ajouter HTTP local.
 4. Ajouter Linux arm64 release.
-5. Ajouter reverse deps.
+5. Ajouter `repolens_snapshot`.

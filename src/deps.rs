@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result};
-use camino::Utf8PathBuf;
+use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 use tree_sitter::{Node, Parser};
 
-use crate::index::{FileId, ProjectIndex};
+use crate::index::{FileEntry, FileId, ProjectIndex};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileDeps {
@@ -17,6 +19,10 @@ pub struct ImportRef {
     pub module: String,
     pub line: usize,
     pub kind: ImportKind,
+    #[serde(default)]
+    pub resolved_path: Option<Utf8PathBuf>,
+    #[serde(default)]
+    pub resolved_file_id: Option<FileId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -33,10 +39,17 @@ pub enum ImportKind {
 pub fn print_deps(index: &ProjectIndex, path: &Utf8PathBuf) {
     for deps in deps_for_file(index, path) {
         for import in deps.imports {
-            println!(
-                "{}:{} {:?} {}",
-                deps.path, import.line, import.kind, import.module
-            );
+            if let Some(resolved) = import.resolved_path {
+                println!(
+                    "{}:{} {:?} {} -> {}",
+                    deps.path, import.line, import.kind, import.module, resolved
+                );
+            } else {
+                println!(
+                    "{}:{} {:?} {}",
+                    deps.path, import.line, import.kind, import.module
+                );
+            }
         }
     }
 }
@@ -48,6 +61,32 @@ pub fn deps_for_file(index: &ProjectIndex, path: &Utf8PathBuf) -> Vec<FileDeps> 
         .filter(|deps| deps.path == *path)
         .cloned()
         .collect()
+}
+
+pub fn resolve_relative_ts_js_imports(deps: &mut [FileDeps], files: &[FileEntry]) {
+    let by_path: BTreeMap<_, _> = files
+        .iter()
+        .map(|file| (file.path.clone(), file.id))
+        .collect();
+
+    for file_deps in deps {
+        for import in &mut file_deps.imports {
+            if !matches!(
+                import.kind,
+                ImportKind::EsImport | ImportKind::CommonJsRequire
+            ) || !is_relative_specifier(&import.module)
+            {
+                continue;
+            }
+
+            if let Some((path, id)) =
+                resolve_ts_js_specifier(&file_deps.path, &import.module, &by_path)
+            {
+                import.resolved_path = Some(path);
+                import.resolved_file_id = Some(id);
+            }
+        }
+    }
 }
 
 pub fn extract_rust_deps(file_id: FileId, path: &Utf8PathBuf, text: &str) -> Result<FileDeps> {
@@ -180,7 +219,62 @@ fn import(node: Node, module: String, kind: ImportKind) -> ImportRef {
         module,
         line: node.start_position().row + 1,
         kind,
+        resolved_path: None,
+        resolved_file_id: None,
     }
+}
+
+fn is_relative_specifier(module: &str) -> bool {
+    module.starts_with("./") || module.starts_with("../")
+}
+
+fn resolve_ts_js_specifier(
+    from: &Utf8Path,
+    module: &str,
+    by_path: &BTreeMap<Utf8PathBuf, FileId>,
+) -> Option<(Utf8PathBuf, FileId)> {
+    let base = from.parent().unwrap_or_else(|| Utf8Path::new(""));
+    let requested = normalize_relative_path(&base.join(module));
+    for candidate in ts_js_candidates(&requested) {
+        if let Some(id) = by_path.get(&candidate) {
+            return Some((candidate, *id));
+        }
+    }
+    None
+}
+
+fn ts_js_candidates(path: &Utf8Path) -> Vec<Utf8PathBuf> {
+    const EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "mts", "cts", "mjs", "cjs"];
+
+    if path.extension().is_some() {
+        return vec![path.to_path_buf()];
+    }
+
+    let mut candidates = vec![path.to_path_buf()];
+    for ext in EXTENSIONS {
+        let mut candidate = path.to_path_buf();
+        candidate.set_extension(ext);
+        candidates.push(candidate);
+    }
+    for ext in EXTENSIONS {
+        candidates.push(path.join(format!("index.{ext}")));
+    }
+    candidates
+}
+
+fn normalize_relative_path(path: &Utf8Path) -> Utf8PathBuf {
+    let mut out = Utf8PathBuf::new();
+    for component in path.components() {
+        match component {
+            Utf8Component::CurDir => {}
+            Utf8Component::ParentDir => {
+                out.pop();
+            }
+            Utf8Component::Normal(part) => out.push(part),
+            Utf8Component::RootDir | Utf8Component::Prefix(_) => return path.to_path_buf(),
+        }
+    }
+    out
 }
 
 fn clean_rust_use(text: &str) -> String {
@@ -219,7 +313,12 @@ fn clean_string(text: &str) -> String {
 mod tests {
     use camino::Utf8PathBuf;
 
-    use super::{ImportKind, extract_python_deps, extract_rust_deps, extract_ts_like_deps};
+    use crate::index::FileEntry;
+
+    use super::{
+        FileDeps, ImportKind, ImportRef, extract_python_deps, extract_rust_deps,
+        extract_ts_like_deps, resolve_relative_ts_js_imports,
+    };
 
     #[test]
     fn extracts_rust_deps() {
@@ -274,5 +373,58 @@ mod tests {
                 .iter()
                 .any(|i| i.module == "pathlib import Path")
         );
+    }
+
+    #[test]
+    fn resolves_relative_ts_imports_to_indexed_files() {
+        let files = vec![
+            file(0, "src/main.ts"),
+            file(1, "src/utils/index.ts"),
+            file(2, "src/lib/math.ts"),
+        ];
+        let mut deps = vec![FileDeps {
+            file_id: 0,
+            path: Utf8PathBuf::from("src/main.ts"),
+            imports: vec![
+                import("./utils", ImportKind::EsImport),
+                import("./lib/math", ImportKind::CommonJsRequire),
+                import("react", ImportKind::EsImport),
+            ],
+        }];
+
+        resolve_relative_ts_js_imports(&mut deps, &files);
+
+        assert_eq!(
+            deps[0].imports[0].resolved_path,
+            Some(Utf8PathBuf::from("src/utils/index.ts"))
+        );
+        assert_eq!(deps[0].imports[0].resolved_file_id, Some(1));
+        assert_eq!(
+            deps[0].imports[1].resolved_path,
+            Some(Utf8PathBuf::from("src/lib/math.ts"))
+        );
+        assert_eq!(deps[0].imports[2].resolved_path, None);
+    }
+
+    fn file(id: u32, path: &str) -> FileEntry {
+        FileEntry {
+            id,
+            path: Utf8PathBuf::from(path),
+            bytes: 1,
+            lines: 1,
+            line_offsets: vec![0],
+            mtime_ms: 0,
+            hash: String::new(),
+        }
+    }
+
+    fn import(module: &str, kind: ImportKind) -> ImportRef {
+        ImportRef {
+            module: module.to_string(),
+            line: 1,
+            kind,
+            resolved_path: None,
+            resolved_file_id: None,
+        }
     }
 }

@@ -15,6 +15,7 @@ Implemented today:
 - Word and trigram indexes for search.
 - Symbol extraction with tree-sitter for Rust, TypeScript, JavaScript, TSX/JSX, and Python.
 - Import/dependency extraction for Rust, TS/JS, and Python.
+- Relative TS/JS dependency resolution.
 - MCP stdio server with compact tools.
 - Basic benchmark command with optional `rg` comparison.
 - CI for Windows, Linux, and macOS.
@@ -23,7 +24,7 @@ Not implemented yet:
 
 - HTTP local server.
 - Watcher/incremental reindex.
-- Deep dependency resolution/reverse deps.
+- Reverse dependency graph.
 
 ## Install From Source
 
@@ -210,7 +211,7 @@ repolens deps main.py .
 Currently extracts:
 
 - Rust: `use`, `mod`
-- TS/JS: `import`, `require`
+- TS/JS: `import`, `require`, with relative path resolution for `./` and `../`
 - Python: `import`, `from ... import`
 
 ### `bench`
@@ -369,6 +370,7 @@ Current test coverage includes:
 - word/trigram extraction
 - symbol extraction
 - dependency extraction
+- TS/JS relative dependency resolution
 - snapshot save/load
 - MCP request handling
 
@@ -376,10 +378,9 @@ Current test coverage includes:
 
 Next planned work:
 
-- TS/JS relative dependency resolution.
-- Release workflow with Windows/Linux/macOS binaries.
 - Watcher and incremental reindex.
 - HTTP localhost server.
+- Linux arm64 release build.
 
 Longer term:
 

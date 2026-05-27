@@ -114,6 +114,7 @@ impl ProjectIndex {
         }
 
         files.sort_by(|a, b| a.path.cmp(&b.path));
+        deps::resolve_relative_ts_js_imports(&mut deps_list, &files);
         let symbols_by_name = index_symbols_by_name(&symbol_list);
         Ok(Self {
             version: 5,
