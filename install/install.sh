@@ -23,14 +23,7 @@ esac
 
 case "$(uname -m)" in
   x86_64|amd64) arch="x86_64" ;;
-  arm64|aarch64)
-    if [ "$os" = "darwin" ]; then
-      arch="arm64"
-    else
-      echo "linux arm64 release asset is not available yet" >&2
-      exit 1
-    fi
-    ;;
+  arm64|aarch64) arch="arm64" ;;
   *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 

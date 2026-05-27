@@ -86,6 +86,13 @@ Linux/macOS:
 curl -fsSL https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.sh | sh
 ```
 
+Defaults:
+
+- Windows installs to `%USERPROFILE%\bin`
+- Linux/macOS installs to `$HOME/.local/bin`
+- checksums are verified before copying the binary
+- supported release assets: Windows x86_64, Linux x86_64/arm64, macOS x86_64/arm64
+
 Installer options:
 
 ```powershell
@@ -94,6 +101,13 @@ Installer options:
 
 ```sh
 REPOLENS_VERSION=v0.1.0 REPOLENS_INSTALL_DIR="$HOME/.local/bin" sh install/install.sh
+```
+
+After install, make sure the install directory is in `PATH`, then run:
+
+```powershell
+repolens --help
+repolens init . --target codex
 ```
 
 ## Quick Start

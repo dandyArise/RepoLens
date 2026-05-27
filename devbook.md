@@ -430,7 +430,7 @@ Bench contre :
 - [x] Auto-config Codex.
 - [x] Auto-config Claude.
 - [x] Auto-config Cursor.
-- [ ] Documentation installation.
+- [x] Documentation installation.
 
 ## Prochaine Étape
 
@@ -438,8 +438,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter documentation installation.
-2. Ajouter tests sécurité Windows/Linux.
-3. Ajouter réindex incrémental fin.
-4. Ajouter snapshots binaires plus rapides.
-5. Ajouter fixtures Rust/TS/Windows paths.
+1. Ajouter tests sécurité Windows/Linux.
+2. Ajouter réindex incrémental fin.
+3. Ajouter snapshots binaires plus rapides.
+4. Ajouter fixtures Rust/TS/Windows paths.
+5. Ajouter parsers Go/PHP.
