@@ -302,7 +302,7 @@ Bench contre :
 - [x] Refuser paths absolus dans commandes ciblant le repo.
 - [x] Ajouter `.repolensrc.toml`.
 - [x] Ajouter `allow_sensitive = false`.
-- [ ] Tests sécurité Windows/Linux.
+- [x] Tests sécurité Windows/Linux.
 
 ### Phase 4: Tests
 
@@ -438,8 +438,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter tests sécurité Windows/Linux.
-2. Ajouter réindex incrémental fin.
-3. Ajouter snapshots binaires plus rapides.
-4. Ajouter fixtures Rust/TS/Windows paths.
-5. Ajouter parsers Go/PHP.
+1. Ajouter réindex incrémental fin.
+2. Ajouter snapshots binaires plus rapides.
+3. Ajouter fixtures Rust/TS/Windows paths.
+4. Ajouter parsers Go/PHP.
+5. Ajouter UI HTTP optionnelle.

@@ -11,10 +11,18 @@ pub fn canonical_utf8(path: &Path) -> Result<Utf8PathBuf> {
 }
 
 pub fn safe_join(root: &Utf8Path, rel: &Utf8Path) -> Result<Utf8PathBuf> {
-    if rel.is_absolute() || rel.components().any(|part| part.as_str() == "..") {
+    if rel.is_absolute() || is_unsafe_relative_path(rel.as_str()) {
         bail!("unsafe path: {rel}");
     }
     Ok(root.join(rel))
+}
+
+fn is_unsafe_relative_path(path: &str) -> bool {
+    path.starts_with('\\')
+        || path.as_bytes().get(1).is_some_and(|byte| *byte == b':')
+        || path
+            .split(['/', '\\'])
+            .any(|part| part == ".." || part.is_empty())
 }
 
 #[cfg(test)]
@@ -27,5 +35,27 @@ mod tests {
     fn safe_join_blocks_parent_traversal() {
         let root = Utf8Path::new("C:/repo");
         assert!(safe_join(root, Utf8Path::new("../secret")).is_err());
+    }
+
+    #[test]
+    fn safe_join_blocks_windows_absolute_forms() {
+        let root = Utf8Path::new("C:/repo");
+        assert!(safe_join(root, Utf8Path::new("C:/secret")).is_err());
+        assert!(safe_join(root, Utf8Path::new("C:\\secret")).is_err());
+        assert!(safe_join(root, Utf8Path::new("\\secret")).is_err());
+    }
+
+    #[test]
+    fn safe_join_blocks_backslash_traversal() {
+        let root = Utf8Path::new("C:/repo");
+        assert!(safe_join(root, Utf8Path::new("..\\secret")).is_err());
+        assert!(safe_join(root, Utf8Path::new("src\\..\\secret")).is_err());
+    }
+
+    #[test]
+    fn safe_join_allows_normal_relative_paths() {
+        let root = Utf8Path::new("C:/repo");
+        assert!(safe_join(root, Utf8Path::new("src/main.rs")).is_ok());
+        assert!(safe_join(root, Utf8Path::new("src\\main.rs")).is_ok());
     }
 }

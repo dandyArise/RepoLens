@@ -82,6 +82,8 @@ mod tests {
         fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
         fs::write(temp.path().join("ignored.txt"), "skip\n").unwrap();
         fs::write(temp.path().join(".env"), "SECRET=1\n").unwrap();
+        fs::create_dir(temp.path().join("secrets")).unwrap();
+        fs::write(temp.path().join("secrets").join("api.json"), "{}\n").unwrap();
 
         let files = source_files(temp.path(), &Config::default()).unwrap();
         let names: Vec<_> = files
@@ -92,5 +94,6 @@ mod tests {
         assert!(names.contains(&"main.rs"));
         assert!(!names.contains(&"ignored.txt"));
         assert!(!names.contains(&".env"));
+        assert!(!names.contains(&"api.json"));
     }
 }

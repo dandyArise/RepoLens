@@ -1,9 +1,12 @@
 use std::path::Path;
 
 pub fn is_sensitive_path(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(is_sensitive_name)
+    path.components().any(|component| {
+        component
+            .as_os_str()
+            .to_str()
+            .is_some_and(is_sensitive_name)
+    })
 }
 
 pub fn is_sensitive_name(name: &str) -> bool {
@@ -20,7 +23,9 @@ pub fn is_sensitive_name(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_sensitive_name;
+    use std::path::Path;
+
+    use super::{is_sensitive_name, is_sensitive_path};
 
     #[test]
     fn detects_sensitive_names() {
@@ -30,5 +35,13 @@ mod tests {
         assert!(is_sensitive_name("id_ed25519"));
         assert!(is_sensitive_name("credentials.json"));
         assert!(!is_sensitive_name("main.rs"));
+    }
+
+    #[test]
+    fn detects_sensitive_path_components() {
+        assert!(is_sensitive_path(Path::new("config/.env.local")));
+        assert!(is_sensitive_path(Path::new("secrets/api.json")));
+        assert!(is_sensitive_path(Path::new("keys/server.pem")));
+        assert!(!is_sensitive_path(Path::new("src/main.rs")));
     }
 }
