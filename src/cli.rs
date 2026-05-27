@@ -97,6 +97,8 @@ pub enum Command {
         symbol: String,
         #[arg(short, long, default_value_t = 20)]
         limit: usize,
+        #[arg(long)]
+        json: bool,
     },
     Edit {
         path: Utf8PathBuf,

@@ -243,6 +243,7 @@ Bench contre :
 
 - [x] Commande `bench` pour `index/search/symbol`.
 - [x] Comparaison `rg` optionnelle si disponible.
+- [x] Rapport bench JSON avec tailles snapshot et temps save/load.
 
 ## Checklist
 
@@ -446,5 +447,5 @@ Ordre recommandé :
 1. Ajouter build perf large repo.
 2. Ajouter plus de langages.
 3. Ajouter polish UI.
-4. Ajouter perf report dans `bench`.
-5. Ajouter packaging install avec auto-init.
+4. Ajouter packaging install avec auto-init.
+5. Ajouter release smoke tests.

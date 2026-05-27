@@ -93,8 +93,9 @@ fn main() -> Result<()> {
             query,
             symbol,
             limit,
+            json,
         } => {
-            bench::run(&root, &query, &symbol, limit)?;
+            bench::run(&root, &query, &symbol, limit, json)?;
         }
         Command::Edit {
             path,

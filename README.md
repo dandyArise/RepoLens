@@ -243,7 +243,10 @@ Measures index/search/symbol timings and compares search with `rg` if available.
 
 ```powershell
 repolens bench . --query ProjectIndex --symbol ProjectIndex --limit 20
+repolens bench . --query ProjectIndex --symbol ProjectIndex --json
 ```
+
+The report includes build/save/load timings and JSON/binary snapshot sizes.
 
 ### `edit`
 
