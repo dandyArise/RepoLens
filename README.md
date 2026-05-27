@@ -21,6 +21,7 @@ Implemented today:
 - Forward and reverse dependency graph for resolved imports.
 - MCP stdio server with compact tools.
 - Localhost HTTP API.
+- Optional localhost UI at `/`.
 - Watch mode with change sequence tracking and incremental file updates.
 - Basic benchmark command with optional `rg` comparison.
 - CI for Windows, Linux, and macOS.
@@ -283,6 +284,7 @@ repolens serve . --host 127.0.0.1 --port 4177
 
 Routes:
 
+- `GET /`
 - `GET /status`
 - `GET /snapshot`
 - `GET /tree?limit=200`

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::{Result, anyhow, bail};
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use camino::Utf8PathBuf;
@@ -101,6 +101,7 @@ pub fn serve(root: &Path, host: &str, port: u16) -> Result<()> {
 
 fn router(state: AppState) -> Router {
     Router::new()
+        .route("/", get(ui))
         .route("/status", get(status))
         .route("/snapshot", get(snapshot_info))
         .route("/tree", get(tree))
@@ -114,6 +115,10 @@ fn router(state: AppState) -> Router {
         .route("/changes", get(changes))
         .route("/edit", post(edit_route))
         .with_state(state)
+}
+
+async fn ui() -> Html<&'static str> {
+    Html(UI_HTML)
 }
 
 async fn status(State(state): State<AppState>) -> Json<Value> {
@@ -247,14 +252,95 @@ fn ipv6_loopback(port: u16) -> SocketAddr {
     SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), port)
 }
 
+const UI_HTML: &str = r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RepoLens</title>
+  <style>
+    :root { --bg:#f6f7f9; --panel:#fff; --text:#17202a; --muted:#5c6670; --line:#d9dee5; --accent:#166534; --accent2:#1d4ed8; --code:#111827; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif; }
+    header { display:flex; justify-content:space-between; gap:16px; padding:14px 20px; border-bottom:1px solid var(--line); background:var(--panel); }
+    h1 { margin:0; font-size:18px; }
+    main { display:grid; grid-template-columns:320px minmax(0,1fr); gap:16px; padding:16px; max-width:1500px; margin:0 auto; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; min-width:0; }
+    .side,.work { display:grid; gap:16px; align-content:start; }
+    .head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); font-weight:650; }
+    .body { padding:12px; }
+    .metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .metric { border:1px solid var(--line); border-radius:6px; padding:8px; min-height:58px; }
+    .metric span,label,.meta { color:var(--muted); font-size:12px; }
+    .metric strong { display:block; font-size:20px; margin-top:2px; }
+    label { display:block; margin-bottom:5px; }
+    input,select,button { height:34px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--text); font:inherit; }
+    input,select { width:100%; padding:0 9px; }
+    button { padding:0 11px; cursor:pointer; background:#f8fafc; white-space:nowrap; }
+    button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .row { display:flex; gap:8px; align-items:end; }
+    .row>* { flex:1; min-width:0; }
+    .row button { flex:0 0 auto; }
+    .list { display:grid; gap:4px; max-height:360px; overflow:auto; }
+    .item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; padding:6px 8px; border-radius:5px; border:1px solid transparent; background:#fff; text-align:left; height:auto; min-height:34px; }
+    .item:hover { border-color:var(--line); background:#f8fafc; }
+    .path { overflow-wrap:anywhere; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+    pre { margin:0; min-height:520px; max-height:680px; overflow:auto; padding:12px; border-radius:6px; background:var(--code); color:#f8fafc; font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; }
+    .tabs { display:flex; gap:6px; }
+    .tabs button { height:30px; }
+    .tabs button.active { color:#fff; background:var(--accent2); border-color:var(--accent2); }
+    @media (max-width:900px) { main { grid-template-columns:1fr; padding:10px; } header { flex-direction:column; } }
+  </style>
+</head>
+<body>
+  <header><h1>RepoLens</h1><div id="root" class="meta"></div></header>
+  <main>
+    <div class="side">
+      <section><div class="head">Status <button id="refresh">Refresh</button></div><div class="body"><div id="metrics" class="metrics"></div></div></section>
+      <section><div class="head">Files</div><div class="body"><div class="row"><div><label>Limit</label><input id="treeLimit" value="100"></div><button id="loadTree">Load</button></div><div id="tree" class="list" style="margin-top:10px"></div></div></section>
+    </div>
+    <div class="work">
+      <section><div class="head">Search</div><div class="body"><div class="row"><div><label>Query</label><input id="query" placeholder="ProjectIndex"></div><div><label>Mode</label><select id="mode"><option value="search">search</option><option value="symbol">symbol</option><option value="word">word</option></select></div><button id="runSearch" class="primary">Run</button></div><div id="results" class="list" style="margin-top:10px"></div></div></section>
+      <section><div class="head"><span id="selected">No file selected</span><div class="tabs"><button data-view="read" class="active">Read</button><button data-view="outline">Outline</button><button data-view="deps">Deps</button><button data-view="rdeps">Rdeps</button></div></div><div class="body"><div class="row" style="margin-bottom:10px"><div><label>Lines</label><input id="lines" placeholder="1-80"></div><button id="loadView">Load</button></div><pre id="viewer"></pre></div></section>
+    </div>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id); let selectedPath = ""; let currentView = "read";
+    async function api(path) { const res = await fetch(path); if (!res.ok) throw new Error(await res.text()); return res.json(); }
+    function pretty(value) { return JSON.stringify(value, null, 2); }
+    function setViewer(value) { $("viewer").textContent = typeof value === "string" ? value : pretty(value); }
+    function escapeHtml(text) { return String(text).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
+    function fileButton(file) { const el = document.createElement("button"); el.className = "item"; el.innerHTML = `<span class="path">${escapeHtml(file.path)}</span><span class="meta">${file.lines} lines</span>`; el.onclick = () => selectFile(file.path); return el; }
+    function resultButton(item) { const el = document.createElement("button"); el.className = "item"; const path = item.path || item; const info = item.line ? `${item.line}` : ""; el.innerHTML = `<span><span class="path">${escapeHtml(path)}</span><br><span class="meta">${escapeHtml(item.text || "")}</span></span><span class="meta">${info}</span>`; el.onclick = () => selectFile(path); return el; }
+    async function loadStatus() { const data = await api("/status"); $("root").textContent = data.root; $("metrics").innerHTML = ""; for (const key of ["files","symbols","words","deps_files"]) { const div = document.createElement("div"); div.className = "metric"; div.innerHTML = `<span>${key}</span><strong>${data[key]}</strong>`; $("metrics").appendChild(div); } }
+    async function loadTree() { const data = await api(`/tree?limit=${encodeURIComponent($("treeLimit").value || "100")}`); $("tree").replaceChildren(...data.map(fileButton)); }
+    async function runSearch() { const q = $("query").value.trim(); if (!q) return; const mode = $("mode").value; const data = await api(`/${mode}?q=${encodeURIComponent(q)}&limit=50`); $("results").replaceChildren(...data.map(resultButton)); }
+    async function selectFile(path) { selectedPath = path; $("selected").textContent = path; await loadView(); }
+    async function loadView() { if (!selectedPath) return; if (currentView === "read") { const lines = $("lines").value.trim(); const data = await api(`/read?path=${encodeURIComponent(selectedPath)}${lines ? `&lines=${encodeURIComponent(lines)}` : ""}`); setViewer(data.text); } else { setViewer(await api(`/${currentView}?path=${encodeURIComponent(selectedPath)}`)); } }
+    document.querySelectorAll("[data-view]").forEach(button => { button.onclick = () => { document.querySelectorAll("[data-view]").forEach(b => b.classList.remove("active")); button.classList.add("active"); currentView = button.dataset.view; loadView(); }; });
+    $("refresh").onclick = loadStatus; $("loadTree").onclick = loadTree; $("runSearch").onclick = runSearch; $("loadView").onclick = loadView; $("query").onkeydown = e => { if (e.key === "Enter") runSearch(); };
+    loadStatus().then(loadTree).catch(err => setViewer(String(err)));
+  </script>
+</body>
+</html>"#;
+
 #[cfg(test)]
 mod tests {
     use std::net::IpAddr;
+
+    use super::UI_HTML;
 
     #[test]
     fn loopback_only_accepts_localhost() {
         assert!("127.0.0.1".parse::<IpAddr>().unwrap().is_loopback());
         assert!("::1".parse::<IpAddr>().unwrap().is_loopback());
         assert!(!"0.0.0.0".parse::<IpAddr>().unwrap().is_loopback());
+    }
+
+    #[test]
+    fn ui_contains_required_routes() {
+        for route in ["/status", "/tree", "/read", "value=\"search\""] {
+            assert!(UI_HTML.contains(route));
+        }
     }
 }

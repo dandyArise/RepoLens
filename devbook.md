@@ -382,6 +382,7 @@ Bench contre :
 - [x] Ajouter `tokio`.
 - [x] Ajouter `axum`.
 - [x] Commande `serve`.
+- [x] UI locale `/`.
 - [x] Route `/status`.
 - [x] Route `/snapshot`.
 - [x] Route `/tree`.
@@ -441,8 +442,8 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 
 Ordre recommandé :
 
-1. Ajouter UI HTTP optionnelle.
-2. Ajouter build perf large repo.
+1. Ajouter build perf large repo.
+2. Ajouter parallel indexing.
 3. Ajouter snapshots mmap.
-4. Ajouter parallel indexing.
-5. Ajouter plus de langages.
+4. Ajouter plus de langages.
+5. Ajouter polish UI.
