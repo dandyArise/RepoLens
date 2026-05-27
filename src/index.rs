@@ -183,11 +183,13 @@ fn line_offsets(text: &str) -> Vec<u64> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use camino::Utf8PathBuf;
 
     use crate::symbols::{Symbol, SymbolKind};
 
-    use super::{index_symbols_by_name, line_offsets};
+    use super::{ProjectIndex, index_symbols_by_name, line_offsets};
 
     #[test]
     fn records_line_offsets() {
@@ -209,5 +211,63 @@ mod tests {
 
         let index = index_symbols_by_name(&symbols);
         assert_eq!(index.get("projectindex").unwrap(), &vec![0]);
+    }
+
+    #[test]
+    fn indexes_rust_fixture_symbols_and_deps() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir(temp.path().join("src")).unwrap();
+        fs::write(
+            temp.path().join("src").join("main.rs"),
+            "mod scanner;\nuse crate::scanner::Scanner;\nfn main() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("src").join("scanner.rs"),
+            "pub struct Scanner;\n",
+        )
+        .unwrap();
+
+        let index = ProjectIndex::build(temp.path()).unwrap();
+
+        assert!(index.files.iter().any(|file| file.path == "src/main.rs"));
+        assert!(index.symbols.iter().any(|symbol| symbol.name == "main"));
+        assert!(
+            index
+                .deps
+                .iter()
+                .flat_map(|deps| deps.imports.iter())
+                .any(|import| import.module == "scanner")
+        );
+    }
+
+    #[test]
+    fn indexes_typescript_fixture_relative_deps() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir(temp.path().join("src")).unwrap();
+        fs::create_dir(temp.path().join("src").join("utils")).unwrap();
+        fs::write(
+            temp.path().join("src").join("app.ts"),
+            "import { helper } from './utils';\nexport function app() { return helper(); }\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("src").join("utils").join("index.ts"),
+            "export function helper() { return 1; }\n",
+        )
+        .unwrap();
+
+        let index = ProjectIndex::build(temp.path()).unwrap();
+        let app = index
+            .file_by_path(&Utf8PathBuf::from("src/app.ts"))
+            .unwrap()
+            .id;
+        let util = index
+            .file_by_path(&Utf8PathBuf::from("src/utils/index.ts"))
+            .unwrap()
+            .id;
+
+        assert_eq!(index.deps_forward.get(&app), Some(&vec![util]));
+        assert_eq!(index.deps_reverse.get(&util), Some(&vec![app]));
     }
 }

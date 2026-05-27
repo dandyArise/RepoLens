@@ -312,9 +312,9 @@ Bench contre :
 - [x] Tests line range.
 - [x] Tests search.
 - [x] Tests snapshot load/save.
-- [ ] Fixtures Rust.
-- [ ] Fixtures TypeScript.
-- [ ] Fixtures Windows paths.
+- [x] Fixtures Rust.
+- [x] Fixtures TypeScript.
+- [x] Fixtures Windows paths.
 - [x] Ajouter `cargo test` CI.
 
 ### Phase 5: CI Cross-Platform
@@ -440,6 +440,6 @@ Ordre recommandé :
 
 1. Ajouter réindex incrémental fin.
 2. Ajouter snapshots binaires plus rapides.
-3. Ajouter fixtures Rust/TS/Windows paths.
-4. Ajouter parsers Go/PHP.
-5. Ajouter UI HTTP optionnelle.
+3. Ajouter parsers Go/PHP.
+4. Ajouter UI HTTP optionnelle.
+5. Ajouter build perf large repo.
