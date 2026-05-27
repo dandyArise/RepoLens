@@ -98,6 +98,42 @@ repolens --help
 repolens init . --target codex
 ```
 
+## Use With AI Agents 🤖
+
+RepoLens can register itself as an MCP server for Codex, Claude Desktop, and Cursor.
+
+From the repository you want to index:
+
+```powershell
+repolens init . --target all
+```
+
+Or configure one client only:
+
+```powershell
+repolens init . --target codex
+repolens init . --target claude
+repolens init . --target cursor
+```
+
+Then restart your AI client. The client will receive a `repolens` MCP server that runs:
+
+```text
+repolens mcp <repo-root>
+```
+
+For best results in agent workflows, add a short note to your project instructions:
+
+```md
+Use RepoLens MCP tools first when available:
+- repolens_search
+- repolens_symbol
+- repolens_outline
+- repolens_deps
+- repolens_read
+- repolens_bundle
+```
+
 ## Install From Source 🛠️
 
 Requirements:
