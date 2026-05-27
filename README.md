@@ -100,7 +100,7 @@ Installer options:
 
 ```powershell
 .\install\install.ps1 -Version v0.1.0 -InstallDir "$env:USERPROFILE\bin"
-.\install\install.ps1 -Init -InitTarget codex -InitRoot "C:\Users\dandy\Documents\Github\RepoLens"
+.\install\install.ps1 -Init -InitTarget codex -InitRoot "$PWD"
 .\install\install.ps1 -Action update
 .\install\install.ps1 -Action uninstall
 ```
@@ -153,7 +153,7 @@ repolens status .
 Example:
 
 ```text
-root: C:\Users\dandy\Documents\Github\RepoLens
+root: C:\path\to\project
 files: 20
 words: 1153
 trigrams: 8889

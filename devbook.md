@@ -257,7 +257,7 @@ Bench contre :
 - [x] Valider `cargo check`.
 - [x] Valider `cargo fmt --check`.
 - [ ] Commit initial.
-- [ ] Push vers `https://github.com/dandyArise/RepoLens.git`.
+- [ ] Push vers le dépôt GitHub distant.
 
 ### Phase 1: Core CLI
 
