@@ -267,6 +267,7 @@ Bench contre :
 - [x] Respect `.gitignore`.
 - [x] Ignorer dossiers lourds (`target`, `node_modules`, `.git`, etc.).
 - [x] Snapshot JSON `.repolens/index.json`.
+- [x] Snapshot binaire `.repolens/index.bin`.
 - [x] Refactor `cli.rs`.
 - [x] Refactor `index.rs`.
 - [x] Refactor `snapshot.rs`.
@@ -439,7 +440,7 @@ Priorité immédiate : terminer Phase 1 et Phase 2.
 Ordre recommandé :
 
 1. Ajouter réindex incrémental fin.
-2. Ajouter snapshots binaires plus rapides.
-3. Ajouter parsers Go/PHP.
-4. Ajouter UI HTTP optionnelle.
-5. Ajouter build perf large repo.
+2. Ajouter parsers Go/PHP.
+3. Ajouter UI HTTP optionnelle.
+4. Ajouter build perf large repo.
+5. Ajouter snapshots mmap.

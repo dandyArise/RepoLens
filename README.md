@@ -12,6 +12,7 @@ Implemented today:
 - `.gitignore`-aware scanner.
 - Safe defaults for sensitive files.
 - JSON snapshot at `.repolens/index.json`.
+- Binary snapshot at `.repolens/index.bin` for faster reloads.
 - Snapshot metadata command/tool.
 - Word and trigram indexes for search.
 - Symbol extraction with tree-sitter for Rust, TypeScript, JavaScript, TSX/JSX, and Python.
@@ -441,6 +442,7 @@ Current test coverage includes:
 - watcher state tracking
 - HTTP loopback guard
 - snapshot save/load
+- binary snapshot save/load
 - MCP request handling
 
 ## Roadmap
@@ -452,6 +454,5 @@ Next planned work:
 Longer term:
 
 - More languages.
-- Faster binary snapshots.
 - Parallel indexing.
 - More robust MCP auto-config variants.
