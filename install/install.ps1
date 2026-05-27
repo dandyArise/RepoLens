@@ -1,4 +1,6 @@
 param(
+    [ValidateSet("install", "update", "uninstall")]
+    [string]$Action = "install",
     [string]$Version = "latest",
     [string]$InstallDir = "$env:USERPROFILE\bin",
     [string]$Repo = "dandyArise/RepoLens",
@@ -9,6 +11,19 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+$installedExe = Join-Path $InstallDir "repolens.exe"
+
+if ($Action -eq "uninstall") {
+    if (Test-Path -LiteralPath $installedExe) {
+        Remove-Item -LiteralPath $installedExe -Force
+        Write-Host "Removed $installedExe"
+    }
+    else {
+        Write-Host "repolens is not installed at $installedExe"
+    }
+    exit 0
+}
 
 function Get-Release {
     param([string]$Repo, [string]$Version)
@@ -60,10 +75,14 @@ try {
     }
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-    $installedExe = Join-Path $InstallDir "repolens.exe"
     Copy-Item -Path $exe.FullName -Destination $installedExe -Force
 
-    Write-Host "Installed repolens to $InstallDir"
+    if ($Action -eq "update") {
+        Write-Host "Updated repolens in $InstallDir"
+    }
+    else {
+        Write-Host "Installed repolens to $InstallDir"
+    }
     Write-Host "Add this directory to PATH if needed:"
     Write-Host "  $InstallDir"
 

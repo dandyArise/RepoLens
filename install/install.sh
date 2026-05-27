@@ -2,6 +2,7 @@
 set -eu
 
 REPO="${REPOLENS_REPO:-dandyArise/RepoLens}"
+ACTION="${REPOLENS_ACTION:-install}"
 VERSION="${REPOLENS_VERSION:-latest}"
 INSTALL_DIR="${REPOLENS_INSTALL_DIR:-$HOME/.local/bin}"
 INIT="${REPOLENS_INIT:-0}"
@@ -17,6 +18,21 @@ need() {
 
 need curl
 need tar
+
+case "$ACTION" in
+  install|update|uninstall) ;;
+  *) echo "invalid REPOLENS_ACTION: $ACTION" >&2; exit 1 ;;
+esac
+
+if [ "$ACTION" = "uninstall" ]; then
+  if [ -f "$INSTALL_DIR/repolens" ]; then
+    rm -f "$INSTALL_DIR/repolens"
+    echo "Removed $INSTALL_DIR/repolens"
+  else
+    echo "repolens is not installed at $INSTALL_DIR/repolens"
+  fi
+  exit 0
+fi
 
 case "$(uname -s)" in
   Linux) os="linux" ;;
@@ -83,7 +99,11 @@ mkdir -p "$INSTALL_DIR"
 cp "$bin" "$INSTALL_DIR/repolens"
 chmod +x "$INSTALL_DIR/repolens"
 
-echo "Installed repolens to $INSTALL_DIR"
+if [ "$ACTION" = "update" ]; then
+  echo "Updated repolens in $INSTALL_DIR"
+else
+  echo "Installed repolens to $INSTALL_DIR"
+fi
 echo "Add this directory to PATH if needed:"
 echo "  $INSTALL_DIR"
 
