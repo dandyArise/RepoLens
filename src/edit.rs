@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::cli::EditOpArg;
 use crate::config::Config;
-use crate::pathing::{canonical_utf8, safe_join};
+use crate::pathing::{canonical_utf8, resolve_in_root};
 use crate::security;
 use crate::snapshot;
 
@@ -33,7 +33,7 @@ pub fn apply(
 
     let root = canonical_utf8(root)?;
     let config = Config::load(root.as_std_path())?;
-    let target = safe_join(&root, path)?;
+    let (target, rel_path) = resolve_in_root(&root, path)?;
 
     if !config.allow_sensitive && security::is_sensitive_path(target.as_std_path()) {
         bail!("refusing to edit sensitive path");
@@ -51,11 +51,11 @@ pub fn apply(
 
     atomic_write(&target, next.as_bytes())?;
     let mut index = snapshot::load_or_build(root.as_std_path())?;
-    index.refresh_file(&path.to_path_buf())?;
+    index.refresh_file(&rel_path)?;
     snapshot::save(&index)?;
 
     Ok(EditResult {
-        path: path.to_path_buf(),
+        path: rel_path,
         hash: next_hash,
         lines: next.lines().count(),
     })
