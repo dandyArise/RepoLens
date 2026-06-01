@@ -809,6 +809,11 @@
       <h4 data-fr="Import / dépendances" data-en="Import / deps">Import / dépendances</h4>
       <p data-fr="Extraction des imports pour Rust (use, mod), TS/JS (import, require) et Python." data-en="Import extraction for Rust (use, mod), TS/JS (import, require) and Python.">Extraction des imports pour Rust (use, mod), TS/JS (import, require) et Python.</p>
     </div>
+    <div class="feature">
+      <div class="feature-icon">📉</div>
+      <h4 data-fr="Économie de contexte" data-en="Context savings">Économie de contexte</h4>
+      <p data-fr="Lecture compact/aggressive, résumés JSON smart et stats gain pour estimer les tokens économisés." data-en="Compact/aggressive reads, smart JSON summaries, and gain stats to estimate saved tokens.">Lecture compact/aggressive, résumés JSON smart et stats gain pour estimer les tokens économisés.</p>
+    </div>
   </div>
 </section>
 
@@ -845,8 +850,18 @@
     </div>
     <div class="cmd-row">
       <span class="cmd-name">read</span>
-      <span class="cmd-desc" data-fr="Lit un fichier avec plage de lignes" data-en="Read a file with line range">Lit un fichier avec plage de lignes</span>
-      <span class="cmd-example">repolens read src/lib.rs . --lines 1-80</span>
+      <span class="cmd-desc" data-fr="Lit un fichier avec plage de lignes ou niveau compact" data-en="Read a file with line range or compact level">Lit un fichier avec plage de lignes ou niveau compact</span>
+      <span class="cmd-example">repolens read src/lib.rs . --level aggressive</span>
+    </div>
+    <div class="cmd-row">
+      <span class="cmd-name">smart</span>
+      <span class="cmd-desc" data-fr="Résumé JSON mécanique d'un fichier" data-en="Mechanical JSON summary for one file">Résumé JSON mécanique d'un fichier</span>
+      <span class="cmd-example">repolens smart src/main.rs .</span>
+    </div>
+    <div class="cmd-row">
+      <span class="cmd-name">gain</span>
+      <span class="cmd-desc" data-fr="Stats locales de tokens économisés" data-en="Local saved-token stats">Stats locales de tokens économisés</span>
+      <span class="cmd-example">repolens gain . --format json</span>
     </div>
     <div class="cmd-row">
       <span class="cmd-name">status</span>
@@ -956,6 +971,7 @@
       <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Commande d'édition atomique" data-en="Atomic edit command">Commande d'édition atomique</span></div>
       <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Watcher + réindexation incrémentale" data-en="Watcher + incremental reindex">Watcher + réindexation incrémentale</span></div>
       <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="MCP auto-config Claude / Cursor / Codex" data-en="MCP auto-config Claude / Cursor / Codex">MCP auto-config Claude / Cursor / Codex</span></div>
+      <div class="roadmap-item"><span class="ri-dot done"></span><span class="ri-text done" data-fr="Read compact/aggressive + smart + gain" data-en="Compact/aggressive read + smart + gain">Read compact/aggressive + smart + gain</span></div>
     </div>
     <div class="roadmap-col">
       <h3 data-fr="🔜 En cours / Prévu" data-en="🔜 Upcoming">🔜 En cours / Prévu</h3>
