@@ -93,10 +93,10 @@ pub fn read_text_with_level(
     }
     let bytes_raw = bytes.len();
     let actual_hash = blake3::hash(&bytes).to_hex().to_string();
-    if let Some(expected_hash) = expected_hash {
-        if actual_hash != expected_hash {
-            bail!("hash mismatch");
-        }
+    if let Some(expected_hash) = expected_hash
+        && actual_hash != expected_hash
+    {
+        bail!("hash mismatch");
     }
     let bytes = match max_bytes {
         Some(max_bytes) => &bytes[..bytes.len().min(max_bytes)],
