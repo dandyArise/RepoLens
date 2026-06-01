@@ -306,6 +306,7 @@ cargo run -- read src/main.rs . --lines 1-40
 cargo run -- read src/main.rs . --level aggressive
 cargo run -- smart src/main.rs .
 cargo run -- gain . --format json
+cargo run -- self-update --version latest
 cargo run -- outline src/main.rs .
 cargo run -- symbol ProjectIndex .
 cargo run -- deps src/main.rs .
@@ -475,6 +476,17 @@ repolens gain . --format json
 ```
 
 Token counts are estimates based on local byte counts. If no usage log exists, RepoLens prints a short message and exits successfully.
+
+### `self-update`
+
+Updates the installed `repolens` binary through the official installer.
+
+```powershell
+repolens self-update
+repolens self-update --version latest
+```
+
+The replacement is started in the background after the current `repolens` process exits, so the running binary is not overwritten in-place.
 
 ### `edit`
 

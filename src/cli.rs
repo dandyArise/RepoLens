@@ -70,6 +70,13 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t = GainFormat::Text)]
         format: GainFormat,
     },
+    #[command(name = "self-update")]
+    SelfUpdate {
+        #[arg(long, default_value = "latest")]
+        version: String,
+        #[arg(long)]
+        install_dir: Option<PathBuf>,
+    },
     Mcp {
         #[arg(default_value = ".")]
         root: PathBuf,

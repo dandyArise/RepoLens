@@ -12,6 +12,7 @@ mod read;
 mod scanner;
 mod search;
 mod security;
+mod self_update;
 mod smart;
 mod snapshot;
 mod symbols;
@@ -81,6 +82,12 @@ fn main() -> Result<()> {
         }
         Command::Gain { root, format } => {
             usage::print_gain(&root, format)?;
+        }
+        Command::SelfUpdate {
+            version,
+            install_dir,
+        } => {
+            self_update::run(&version, install_dir)?;
         }
         Command::Mcp { root } => {
             mcp::serve(&root)?;
