@@ -105,6 +105,29 @@ function Select-Asset {
     return $asset
 }
 
+function Get-Sha256FileHash {
+    param([string]$Path)
+
+    if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) {
+        return (Get-FileHash -Algorithm SHA256 $Path).Hash.ToLowerInvariant()
+    }
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $hashBytes = $sha256.ComputeHash($stream)
+            return ([System.BitConverter]::ToString($hashBytes) -replace "-", "").ToLowerInvariant()
+        }
+        finally {
+            $sha256.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 $assetName = "repolens-windows-x86_64.zip"
 $release = Get-Release -Repo $Repo -Version $Version
 $archiveAsset = Select-Asset -Release $release -Name $assetName
@@ -121,7 +144,7 @@ try {
     Invoke-WebRequest -UseBasicParsing -Uri $checksumAsset.browser_download_url -OutFile $checksumPath
 
     $expected = (Get-Content $checksumPath -Raw).Trim().Split(" ")[0].ToLowerInvariant()
-    $actual = (Get-FileHash -Algorithm SHA256 $archivePath).Hash.ToLowerInvariant()
+    $actual = Get-Sha256FileHash -Path $archivePath
     if ($expected -ne $actual) {
         throw "checksum mismatch"
     }
