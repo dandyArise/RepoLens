@@ -3,6 +3,9 @@ use std::path::PathBuf;
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 
+use crate::read::ReadLevel;
+use crate::usage::GainFormat;
+
 #[derive(Parser)]
 #[command(name = "repolens")]
 #[command(about = "Fast local codebase index for agents")]
@@ -49,10 +52,23 @@ pub enum Command {
         root: PathBuf,
         #[arg(long)]
         lines: Option<String>,
+        #[arg(short, long, value_enum, default_value_t = ReadLevel::Normal)]
+        level: ReadLevel,
         #[arg(long)]
         max_bytes: Option<usize>,
         #[arg(long)]
         hash: Option<String>,
+    },
+    Smart {
+        path: Utf8PathBuf,
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
+    Gain {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+        #[arg(long, value_enum, default_value_t = GainFormat::Text)]
+        format: GainFormat,
     },
     Mcp {
         #[arg(default_value = ".")]

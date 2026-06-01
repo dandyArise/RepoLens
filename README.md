@@ -303,6 +303,9 @@ cargo run -- index .
 cargo run -- status .
 cargo run -- search "ProjectIndex" .
 cargo run -- read src/main.rs . --lines 1-40
+cargo run -- read src/main.rs . --level aggressive
+cargo run -- smart src/main.rs .
+cargo run -- gain . --format json
 cargo run -- outline src/main.rs .
 cargo run -- symbol ProjectIndex .
 cargo run -- deps src/main.rs .
@@ -372,7 +375,27 @@ Reads a file with optional line range, byte cap, and hash guard.
 repolens read src/main.rs . --lines 1-80
 repolens read src/main.rs . --max-bytes 4000
 repolens read src/main.rs . --hash <blake3_hash>
+repolens read src/main.rs . --level compact
+repolens read src/main.rs . --level aggressive
 ```
+
+Read levels:
+
+- `normal`: current behavior, full text with optional line range.
+- `compact`: keeps structure and short bodies, omits long function bodies.
+- `aggressive`: keeps imports and likely signatures for quick code orientation.
+
+`read` records local usage estimates in `.repolens/usage.jsonl` when it can write there. Logging never blocks the read command.
+
+### `smart`
+
+Prints a compact JSON summary for one file using indexed symbols and imports.
+
+```powershell
+repolens smart src/main.rs .
+```
+
+The v1 summary is mechanical, not AI-generated. It is based on symbol names, imports, language, and file size.
 
 ### `outline`
 
@@ -441,6 +464,17 @@ repolens bench . --query ProjectIndex --symbol ProjectIndex --json
 ```
 
 The report includes build/save/load timings and JSON/binary snapshot sizes.
+
+### `gain`
+
+Summarizes estimated context savings from local `read` and `smart` usage logs.
+
+```powershell
+repolens gain .
+repolens gain . --format json
+```
+
+Token counts are estimates based on local byte counts. If no usage log exists, RepoLens prints a short message and exits successfully.
 
 ### `edit`
 

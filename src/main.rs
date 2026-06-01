@@ -12,8 +12,10 @@ mod read;
 mod scanner;
 mod search;
 mod security;
+mod smart;
 mod snapshot;
 mod symbols;
+mod usage;
 mod watcher;
 
 use anyhow::Result;
@@ -61,10 +63,24 @@ fn main() -> Result<()> {
             path,
             root,
             lines,
+            level,
             max_bytes,
             hash,
         } => {
-            read::read(&root, &path, lines.as_deref(), max_bytes, hash.as_deref())?;
+            read::read(
+                &root,
+                &path,
+                lines.as_deref(),
+                level,
+                max_bytes,
+                hash.as_deref(),
+            )?;
+        }
+        Command::Smart { path, root } => {
+            smart::print(&root, &path)?;
+        }
+        Command::Gain { root, format } => {
+            usage::print_gain(&root, format)?;
         }
         Command::Mcp { root } => {
             mcp::serve(&root)?;
