@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 
@@ -28,7 +29,7 @@ fn run_windows(version: &str, install_dir: &Path) -> Result<()> {
     let pid = std::process::id();
     let version = powershell_quote(version);
     let install_dir = powershell_quote(&install_dir.display().to_string());
-    let url = powershell_quote(POWERSHELL_INSTALLER_URL);
+    let url = powershell_quote(&cache_busted_url(POWERSHELL_INSTALLER_URL));
     let command = format!(
         "$ErrorActionPreference = 'Stop'; \
          $process = Get-Process -Id {pid} -ErrorAction SilentlyContinue; \
@@ -80,10 +81,19 @@ fn unix_update_script(pid: u32, version: &str, install_dir: &Path) -> String {
          curl -fsSL {url} -o \"$tmp\" && \
          REPOLENS_ACTION=update REPOLENS_VERSION={version} REPOLENS_INSTALL_DIR={install_dir} sh \"$tmp\"; \
          status=$?; rm -f \"$tmp\"; exit $status",
-        url = shell_quote(SHELL_INSTALLER_URL),
+        url = shell_quote(&cache_busted_url(SHELL_INSTALLER_URL)),
         version = shell_quote(version),
         install_dir = shell_quote(&install_dir.display().to_string()),
     )
+}
+
+fn cache_busted_url(url: &str) -> String {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
+    let sep = if url.contains('?') { '&' } else { '?' };
+    format!("{url}{sep}cache_bust={stamp}")
 }
 
 fn powershell_quote(value: &str) -> String {
@@ -98,7 +108,7 @@ fn shell_quote(value: &str) -> String {
 mod tests {
     use std::path::Path;
 
-    use super::{powershell_quote, shell_quote, unix_update_script};
+    use super::{cache_busted_url, powershell_quote, shell_quote, unix_update_script};
 
     #[test]
     fn quotes_powershell_arguments() {
@@ -118,5 +128,13 @@ mod tests {
         assert!(script.contains("while kill -0 123"));
         assert!(script.contains("REPOLENS_ACTION=update"));
         assert!(script.contains("REPOLENS_INSTALL_DIR='/tmp/repolens'"));
+        assert!(script.contains("cache_bust="));
+    }
+
+    #[test]
+    fn adds_cache_buster_to_installer_url() {
+        let url = cache_busted_url("https://example.com/install.ps1");
+
+        assert!(url.starts_with("https://example.com/install.ps1?cache_bust="));
     }
 }
