@@ -56,6 +56,7 @@ pub fn print(root: &Path, path: &Utf8Path) -> Result<()> {
             level: None,
             parser: report.parser.as_deref(),
             fallback: Some(report.fallback),
+            savings_source: Some("smart_summary"),
             bytes_raw: bytes.len(),
             bytes_out: output.len(),
         },

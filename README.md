@@ -7,7 +7,7 @@ RepoLens scans a repository, builds compact local indexes, and exposes code navi
 ## Links
 
 - 🚀 [Latest release](https://github.com/dandyArise/RepoLens/releases/latest)
-- 📦 [v0.1.5 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.5)
+- 📦 [v0.1.6 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.6)
 - ⚙️ [GitHub Actions builds](https://github.com/dandyArise/RepoLens/actions)
 - 🧩 [Windows installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.ps1)
 - 🧩 [Linux/macOS installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.sh)
@@ -189,7 +189,7 @@ iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.p
 ## Installer Options
 
 ```powershell
-.\install\install.ps1 -Version v0.1.5
+.\install\install.ps1 -Version v0.1.6
 .\install\install.ps1 -Action update
 .\install\install.ps1 -Action status -InitTarget all
 .\install\install.ps1 -Action disable -InitTarget codex
@@ -197,7 +197,7 @@ iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.p
 ```
 
 ```sh
-REPOLENS_VERSION=v0.1.5 sh install/install.sh
+REPOLENS_VERSION=v0.1.6 sh install/install.sh
 REPOLENS_ACTION=update sh install/install.sh
 REPOLENS_ACTION=status REPOLENS_INIT_TARGET=all sh install/install.sh
 REPOLENS_ACTION=disable REPOLENS_INIT_TARGET=codex sh install/install.sh
@@ -286,8 +286,8 @@ Published assets are available on the [latest release page](https://github.com/d
 To create a release:
 
 ```powershell
-git tag v0.1.5
-git push origin v0.1.5
+git tag v0.1.6
+git push origin v0.1.6
 ```
 
 During development:
@@ -475,7 +475,7 @@ repolens gain .
 repolens gain . --format json
 ```
 
-Token counts are estimates based on local byte counts. If no usage log exists, RepoLens prints a short message and exits successfully.
+Token counts are estimates based on local byte counts. `gain` separates savings sources such as line ranges, byte caps, compact reads, aggressive reads, and smart summaries. If no usage log exists, RepoLens prints a short message and exits successfully.
 
 ### `self-update`
 

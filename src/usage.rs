@@ -32,6 +32,8 @@ pub struct UsageEvent {
     parser: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     fallback: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    savings_source: Option<String>,
     bytes_raw: usize,
     bytes_out: usize,
     tokens_raw_est: usize,
@@ -46,6 +48,7 @@ pub struct UsageInput<'a> {
     pub level: Option<&'a str>,
     pub parser: Option<&'a str>,
     pub fallback: Option<bool>,
+    pub savings_source: Option<&'a str>,
     pub bytes_raw: usize,
     pub bytes_out: usize,
 }
@@ -56,6 +59,8 @@ struct UsageRecord {
     mode: String,
     level: Option<String>,
     parser: Option<String>,
+    fallback: Option<bool>,
+    savings_source: Option<String>,
     bytes_raw: usize,
     bytes_out: usize,
     tokens_raw_est: usize,
@@ -82,6 +87,7 @@ struct GainReport {
     by_mode: BTreeMap<String, GainBucket>,
     by_level: BTreeMap<String, GainBucket>,
     by_parser: BTreeMap<String, GainBucket>,
+    by_savings_source: BTreeMap<String, GainBucket>,
     total: GainBucket,
 }
 
@@ -142,6 +148,7 @@ fn try_log_usage(root: &Utf8Path, input: UsageInput<'_>) -> Result<()> {
         level: input.level.map(str::to_string),
         parser: input.parser.map(str::to_string),
         fallback: input.fallback,
+        savings_source: input.savings_source.map(str::to_string),
         bytes_raw,
         bytes_out,
         tokens_raw_est,
@@ -188,6 +195,7 @@ fn build_gain_report(records: &[UsageRecord]) -> GainReport {
     let mut by_mode = BTreeMap::new();
     let mut by_level = BTreeMap::new();
     let mut by_parser = BTreeMap::new();
+    let mut by_savings_source = BTreeMap::new();
     let mut total = GainBucket::default();
 
     for record in records {
@@ -199,13 +207,19 @@ fn build_gain_report(records: &[UsageRecord]) -> GainReport {
             record,
         );
         if let Some(level) = &record.level {
-            add_record(by_level.entry(level.clone()).or_default(), record);
+            add_record(
+                by_level.entry(level_bucket(record, level)).or_default(),
+                record,
+            );
         }
-        let parser = record
-            .parser
-            .clone()
-            .unwrap_or_else(|| "fallback".to_string());
+        let parser = parser_bucket(record);
         add_record(by_parser.entry(parser).or_default(), record);
+        add_record(
+            by_savings_source
+                .entry(savings_source_bucket(record))
+                .or_default(),
+            record,
+        );
     }
 
     finalize_bucket(&mut total);
@@ -218,6 +232,9 @@ fn build_gain_report(records: &[UsageRecord]) -> GainReport {
     for bucket in by_parser.values_mut() {
         finalize_bucket(bucket);
     }
+    for bucket in by_savings_source.values_mut() {
+        finalize_bucket(bucket);
+    }
 
     GainReport {
         period: "all".to_string(),
@@ -226,6 +243,7 @@ fn build_gain_report(records: &[UsageRecord]) -> GainReport {
         by_mode,
         by_level,
         by_parser,
+        by_savings_source,
         total,
     }
 }
@@ -276,10 +294,53 @@ fn print_gain_text(report: &GainReport) {
         );
     }
     println!();
+    println!("By savings source:");
+    for (source, bucket) in &report.by_savings_source {
+        println!(
+            "  {source} ({}) : {:.1}% reduction",
+            bucket.events,
+            bucket.reduction_ratio * 100.0
+        );
+    }
+    println!();
     println!("By parser:");
     for (parser, bucket) in &report.by_parser {
         println!("  {parser} ({})", bucket.events);
     }
+}
+
+fn level_bucket(record: &UsageRecord, level: &str) -> String {
+    if level != "normal" {
+        return level.to_string();
+    }
+
+    match record.savings_source.as_deref() {
+        Some("line_range") => "normal_line_range".to_string(),
+        Some("byte_cap") => "normal_byte_cap".to_string(),
+        Some("line_range_and_byte_cap") => "normal_line_range_and_byte_cap".to_string(),
+        Some("full_read") => "normal_full_read".to_string(),
+        Some(source) => format!("normal_{source}"),
+        None => "normal_read".to_string(),
+    }
+}
+
+fn parser_bucket(record: &UsageRecord) -> String {
+    if let Some(parser) = &record.parser {
+        return parser.clone();
+    }
+
+    if record.fallback.unwrap_or(false) {
+        "fallback".to_string()
+    } else {
+        "not_applicable".to_string()
+    }
+}
+
+fn savings_source_bucket(record: &UsageRecord) -> String {
+    record
+        .savings_source
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 fn estimate_tokens(bytes: usize) -> usize {
@@ -356,6 +417,8 @@ mod tests {
                 mode: "cli".to_string(),
                 level: Some("compact".to_string()),
                 parser: Some("tree-sitter-rust".to_string()),
+                fallback: Some(false),
+                savings_source: Some("compact".to_string()),
                 bytes_raw: 400,
                 bytes_out: 100,
                 tokens_raw_est: 100,
@@ -364,8 +427,10 @@ mod tests {
             },
             UsageRecord {
                 mode: "cli".to_string(),
-                level: Some("aggressive".to_string()),
+                level: Some("normal".to_string()),
                 parser: None,
+                fallback: Some(false),
+                savings_source: Some("line_range".to_string()),
                 bytes_raw: 800,
                 bytes_out: 200,
                 tokens_raw_est: 200,
@@ -380,7 +445,9 @@ mod tests {
         assert_eq!(report.total.tokens_saved_est, 225);
         assert_eq!(report.by_mode["cli"].events, 2);
         assert_eq!(report.by_level["compact"].tokens_saved_est, 75);
-        assert_eq!(report.by_parser["fallback"].events, 1);
+        assert_eq!(report.by_level["normal_line_range"].tokens_saved_est, 150);
+        assert_eq!(report.by_parser["not_applicable"].events, 1);
+        assert_eq!(report.by_savings_source["line_range"].events, 1);
         assert!((report.total.reduction_ratio - 0.75).abs() < f64::EPSILON);
     }
 }

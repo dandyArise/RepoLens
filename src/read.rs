@@ -41,6 +41,7 @@ pub fn read(
             level: Some(level.as_str()),
             parser: output.parser.as_deref(),
             fallback: Some(output.fallback),
+            savings_source: Some(savings_source(level, lines, max_bytes)),
             bytes_raw: output.bytes_raw,
             bytes_out: output.content.len(),
         },
@@ -118,6 +119,19 @@ pub fn read_text_with_level(
         parser,
         fallback,
     })
+}
+
+fn savings_source(level: ReadLevel, lines: Option<&str>, max_bytes: Option<usize>) -> &'static str {
+    match level {
+        ReadLevel::Compact => "compact",
+        ReadLevel::Aggressive => "aggressive",
+        ReadLevel::Normal => match (lines.is_some(), max_bytes.is_some()) {
+            (true, true) => "line_range_and_byte_cap",
+            (true, false) => "line_range",
+            (false, true) => "byte_cap",
+            (false, false) => "full_read",
+        },
+    }
 }
 
 impl ReadLevel {
