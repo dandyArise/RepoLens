@@ -128,6 +128,28 @@ function Get-Sha256FileHash {
     }
 }
 
+function Copy-InstalledExeWithRetry {
+    param(
+        [string]$Source,
+        [string]$Destination,
+        [int]$Attempts = 80,
+        [int]$DelayMs = 500
+    )
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            Copy-Item -Path $Source -Destination $Destination -Force
+            return
+        }
+        catch [System.IO.IOException] {
+            if ($attempt -eq $Attempts) {
+                throw "failed to update $Destination because it is still in use. Close running RepoLens processes and run `repolens self-update` again."
+            }
+            Start-Sleep -Milliseconds $DelayMs
+        }
+    }
+}
+
 $assetName = "repolens-windows-x86_64.zip"
 $release = Get-Release -Repo $Repo -Version $Version
 $archiveAsset = Select-Asset -Release $release -Name $assetName
@@ -156,7 +178,7 @@ try {
     }
 
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-    Copy-Item -Path $exe.FullName -Destination $installedExe -Force
+    Copy-InstalledExeWithRetry -Source $exe.FullName -Destination $installedExe
     Add-ToUserPath -Dir $InstallDir
 
     if ($Action -eq "update") {
