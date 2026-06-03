@@ -16,6 +16,7 @@ mod self_update;
 mod smart;
 mod snapshot;
 mod symbols;
+mod tests_aware;
 mod usage;
 mod watcher;
 
@@ -79,6 +80,9 @@ fn main() -> Result<()> {
         }
         Command::Smart { path, root } => {
             smart::print(&root, &path)?;
+        }
+        Command::TestsAware { root } => {
+            tests_aware::print(&root)?;
         }
         Command::Gain { root, format } => {
             usage::print_gain(&root, format)?;

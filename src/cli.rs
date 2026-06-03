@@ -64,6 +64,11 @@ pub enum Command {
         #[arg(default_value = ".")]
         root: PathBuf,
     },
+    #[command(name = "tests-aware")]
+    TestsAware {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+    },
     Gain {
         #[arg(default_value = ".")]
         root: PathBuf,

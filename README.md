@@ -11,6 +11,7 @@ RepoLens scans a repository, builds compact local indexes, and exposes code navi
 - ⚙️ [GitHub Actions builds](https://github.com/dandyArise/RepoLens/actions)
 - 🧩 [Windows installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.ps1)
 - 🧩 [Linux/macOS installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.sh)
+- 🗺️ [Roadmap](ROADMAP.md)
 
 ## Highlights
 
@@ -67,6 +68,7 @@ Implemented:
 - Optional localhost UI at `/`.
 - Watch mode with change sequence tracking and incremental file updates.
 - Basic benchmark command with optional `rg` comparison.
+- Generic tests-aware report for frameworks, fixtures, mocks, and assertions.
 - Release builds for Windows, Linux, and macOS.
 - CI for Windows, Linux, and macOS with Rust cache.
 
@@ -305,6 +307,7 @@ cargo run -- search "ProjectIndex" .
 cargo run -- read src/main.rs . --lines 1-40
 cargo run -- read src/main.rs . --level aggressive
 cargo run -- smart src/main.rs .
+cargo run -- tests-aware .
 cargo run -- gain . --format json
 cargo run -- self-update --version latest
 cargo run -- outline src/main.rs .
@@ -397,6 +400,16 @@ repolens smart src/main.rs .
 ```
 
 The v1 summary is mechanical, not AI-generated. It is based on symbol names, imports, language, and file size.
+
+### `tests-aware`
+
+Prints a generic JSON report about test files, frameworks, fixtures, mocks, assertions, and important lines.
+
+```powershell
+repolens tests-aware .
+```
+
+The report is repo-generic. It uses path and content heuristics across common ecosystems instead of assuming one stack.
 
 ### `outline`
 
