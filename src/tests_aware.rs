@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Serialize;
 
@@ -84,8 +84,9 @@ fn build_report(root: &Utf8Path, files: Vec<std::path::PathBuf>) -> Result<Tests
                 .to_path_buf(),
         )
         .map_err(|path| anyhow::anyhow!("non-utf8 path {}", path.display()))?;
-        let text = fs::read_to_string(&path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
         let signals = analyze_file(&rel, &text);
         if signals.detected_by.is_empty() {
             continue;
@@ -387,6 +388,7 @@ def test_fetch(monkeypatch):
             "import { describe, expect, it, vi } from 'vitest';\nit('works', () => { const fn = vi.fn(); expect(fn).toBeDefined(); });\n",
         )
         .unwrap();
+        fs::write(temp.path().join("favicon.png"), b"\x89PNG\r\n\x1a\n\0").unwrap();
         fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
 
         let report = analyze(temp.path()).unwrap();

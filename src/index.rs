@@ -220,8 +220,8 @@ fn extract_symbols(id: FileId, path: &Utf8PathBuf, text: &str) -> Result<Vec<Sym
             symbols::extract_cpp_symbols(id, path, text)
         }
         Some("rb") => symbols::extract_ruby_symbols(id, path, text),
-        Some("json") => symbols::extract_json_symbols(id, path, text),
-        Some("toml") => symbols::extract_toml_symbols(id, path, text),
+        Some("json") => Ok(symbols::extract_json_symbols(id, path, text).unwrap_or_default()),
+        Some("toml") => Ok(symbols::extract_toml_symbols(id, path, text).unwrap_or_default()),
         Some("yml") | Some("yaml") => Ok(symbols::extract_yaml_symbols(id, path, text)),
         _ => Ok(Vec::new()),
     }
@@ -419,6 +419,24 @@ mod tests {
 
         assert_eq!(index.deps_forward.get(&app), Some(&vec![util]));
         assert_eq!(index.deps_reverse.get(&util), Some(&vec![app]));
+    }
+
+    #[test]
+    fn tolerates_invalid_config_files_during_indexing() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("package.json"), "{ invalid json\n").unwrap();
+        fs::write(temp.path().join("bad.toml"), "[package\nname = 'x'\n").unwrap();
+        fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
+
+        let index = ProjectIndex::build(temp.path()).unwrap();
+
+        assert!(
+            index
+                .file_by_path(&Utf8PathBuf::from("package.json"))
+                .is_some()
+        );
+        assert!(index.file_by_path(&Utf8PathBuf::from("bad.toml")).is_some());
+        assert!(index.symbols.iter().any(|symbol| symbol.name == "main"));
     }
 
     #[test]
