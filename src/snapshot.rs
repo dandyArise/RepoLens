@@ -27,14 +27,15 @@ pub struct SnapshotInfo {
 pub fn load_or_build(root: &Path) -> Result<ProjectIndex> {
     let root = canonical_utf8(root)?;
     let binary_path = binary_index_path(&root);
-    if let Ok(bytes) = mmap_file(&binary_path)
+    let index_path = index_path(&root);
+    if binary_is_current(&binary_path, &index_path)
+        && let Ok(bytes) = mmap_file(&binary_path)
         && let Ok((index, _)) =
             bincode::serde::decode_from_slice(bytes.as_ref(), bincode::config::standard())
     {
         return Ok(index);
     }
 
-    let index_path = index_path(&root);
     match fs::read_to_string(&index_path) {
         Ok(raw) => serde_json::from_str(&raw).or_else(|_| ProjectIndex::build(root.as_std_path())),
         Err(_) => ProjectIndex::build(root.as_std_path()),
@@ -56,8 +57,20 @@ pub fn save(index: &ProjectIndex) -> Result<()> {
 
     let binary_path = dir.join("index.bin");
     let binary = bincode::serde::encode_to_vec(index, bincode::config::standard())?;
-    fs::write(&binary_path, binary).with_context(|| format!("failed to write {binary_path}"))?;
+    let _ = fs::write(&binary_path, binary);
     Ok(())
+}
+
+fn binary_is_current(binary_path: &Utf8Path, index_path: &Utf8Path) -> bool {
+    let Ok(binary_modified) = fs::metadata(binary_path.as_std_path()).and_then(|m| m.modified())
+    else {
+        return false;
+    };
+    let Ok(index_modified) = fs::metadata(index_path.as_std_path()).and_then(|m| m.modified())
+    else {
+        return true;
+    };
+    binary_modified >= index_modified
 }
 
 pub fn index_path(root: &Utf8Path) -> Utf8PathBuf {

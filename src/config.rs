@@ -8,12 +8,14 @@ use serde::Deserialize;
 pub struct Config {
     pub max_file_size: u64,
     pub allow_sensitive: bool,
+    pub include_hidden: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct RawConfig {
     max_file_size: Option<String>,
     allow_sensitive: Option<bool>,
+    include_hidden: Option<bool>,
 }
 
 impl Config {
@@ -34,6 +36,7 @@ impl Config {
                 .transpose()?
                 .unwrap_or(Self::default().max_file_size),
             allow_sensitive: raw.allow_sensitive.unwrap_or(false),
+            include_hidden: raw.include_hidden.unwrap_or(false),
         })
     }
 }
@@ -43,6 +46,7 @@ impl Default for Config {
         Self {
             max_file_size: 1024 * 1024,
             allow_sensitive: false,
+            include_hidden: false,
         }
     }
 }
@@ -79,5 +83,6 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.max_file_size, 1024 * 1024);
         assert!(!config.allow_sensitive);
+        assert!(!config.include_hidden);
     }
 }

@@ -7,7 +7,7 @@ RepoLens scans a repository, builds compact local indexes, and exposes code navi
 ## Links
 
 - 🚀 [Latest release](https://github.com/dandyArise/RepoLens/releases/latest)
-- 📦 [v0.1.8 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.8)
+- 📦 [v0.1.9 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.9)
 - ⚙️ [GitHub Actions builds](https://github.com/dandyArise/RepoLens/actions)
 - 🧩 [Windows installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.ps1)
 - 🧩 [Linux/macOS installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.sh)
@@ -52,7 +52,7 @@ search -> inspect symbols -> read focused lines -> check dependencies -> edit wi
 Implemented:
 
 - Cross-platform Rust CLI.
-- `.gitignore`-aware scanner.
+- `rg`-like scanner defaults: git ignores, hidden files, common build folders, size caps, and sensitive paths.
 - Safe defaults for sensitive files.
 - JSON snapshot at `.repolens/index.json`.
 - Binary snapshot at `.repolens/index.bin` with mmap loading for faster reloads.
@@ -191,7 +191,7 @@ iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.p
 ## Installer Options
 
 ```powershell
-.\install\install.ps1 -Version v0.1.8
+.\install\install.ps1 -Version v0.1.9
 .\install\install.ps1 -Action update
 .\install\install.ps1 -Action status -InitTarget all
 .\install\install.ps1 -Action disable -InitTarget codex
@@ -199,7 +199,7 @@ iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.p
 ```
 
 ```sh
-REPOLENS_VERSION=v0.1.8 sh install/install.sh
+REPOLENS_VERSION=v0.1.9 sh install/install.sh
 REPOLENS_ACTION=update sh install/install.sh
 REPOLENS_ACTION=status REPOLENS_INIT_TARGET=all sh install/install.sh
 REPOLENS_ACTION=disable REPOLENS_INIT_TARGET=codex sh install/install.sh
@@ -288,8 +288,8 @@ Published assets are available on the [latest release page](https://github.com/d
 To create a release:
 
 ```powershell
-git tag v0.1.8
-git push origin v0.1.8
+git tag v0.1.9
+git push origin v0.1.9
 ```
 
 During development:
@@ -658,12 +658,16 @@ Example:
 ```toml
 max_file_size = "1mb"
 allow_sensitive = false
+include_hidden = false
 ```
 
 Defaults:
 
 - `max_file_size = "1mb"`
 - `allow_sensitive = false`
+- `include_hidden = false`
+
+By default RepoLens follows `rg`-like repository filtering: `.gitignore`, git excludes, global gitignore, and hidden files are respected. Set `include_hidden = true` only when hidden project files such as `.github` or `.vscode` must be indexed.
 
 An example file is included:
 

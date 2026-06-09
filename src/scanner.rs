@@ -22,8 +22,9 @@ const SKIP_DIRS: &[&str] = &[
 pub fn source_files(root: &Path, config: &Config) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     let allow_sensitive = config.allow_sensitive;
+    let filter_hidden = !config.include_hidden;
     let walker = WalkBuilder::new(root)
-        .hidden(false)
+        .hidden(filter_hidden)
         .git_ignore(true)
         .git_global(true)
         .git_exclude(true)
@@ -80,6 +81,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         fs::write(temp.path().join(".gitignore"), "ignored.txt\n").unwrap();
         fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
+        fs::write(temp.path().join(".hidden.rs"), "fn hidden() {}\n").unwrap();
         fs::write(temp.path().join("ignored.txt"), "skip\n").unwrap();
         fs::write(temp.path().join(".env"), "SECRET=1\n").unwrap();
         fs::create_dir(temp.path().join("secrets")).unwrap();
@@ -92,8 +94,30 @@ mod tests {
             .collect();
 
         assert!(names.contains(&"main.rs"));
+        assert!(!names.contains(&".hidden.rs"));
         assert!(!names.contains(&"ignored.txt"));
         assert!(!names.contains(&".env"));
         assert!(!names.contains(&"api.json"));
+    }
+
+    #[test]
+    fn can_include_hidden_files_when_configured() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join(".hidden.rs"), "fn hidden() {}\n").unwrap();
+
+        let files = source_files(
+            temp.path(),
+            &Config {
+                include_hidden: true,
+                ..Config::default()
+            },
+        )
+        .unwrap();
+        let names: Vec<_> = files
+            .iter()
+            .filter_map(|path| path.file_name()?.to_str())
+            .collect();
+
+        assert!(names.contains(&".hidden.rs"));
     }
 }
