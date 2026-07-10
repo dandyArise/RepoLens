@@ -118,7 +118,7 @@ Then open a project folder and activate RepoLens for your AI client:
 repolens init . --target codex
 ```
 
-Here `.` means the current project folder. You can run the same command in any other repository when you want RepoLens there too.
+Here `.` means the current project folder. You can run the same command in any other repository when you want RepoLens there too. Codex registrations are project-specific: every repository gets a stable `repolens_<project>_<hash>` MCP server entry, and registering another repository does not replace the previous one.
 
 Use all supported clients:
 
@@ -132,6 +132,8 @@ Check or disable later:
 repolens mcp-status --target all
 repolens disable --target codex
 ```
+
+For Codex, `mcp-status` reports how many RepoLens projects are registered. `disable --target codex` removes all RepoLens project entries while preserving unrelated MCP servers.
 
 ## Troubleshooting 🧯
 
@@ -168,9 +170,10 @@ repolens mcp-status --target all
 
 ### I ran `init` from the wrong folder
 
-Run it again from the correct project folder. RepoLens will replace its own MCP entry:
+Each Codex project is registered independently. Disable all RepoLens Codex entries, then initialize only the projects you want to keep:
 
 ```powershell
+repolens disable --target codex
 cd <correct-project-folder>
 repolens init . --target codex
 ```
@@ -600,6 +603,20 @@ Current targets:
 
 ```text
 repolens mcp <repo-root>
+```
+
+Codex uses one stable MCP entry per repository. A legacy `[mcp_servers.repolens]` entry is migrated automatically to the project-specific naming scheme the next time `init --target codex` runs. Existing project registrations, unrelated MCP servers, comments, and formatting in `config.toml` are preserved.
+
+Example with two repositories:
+
+```toml
+[mcp_servers.repolens_github_project_a_718d9cf2]
+command = "C:\\Users\\me\\bin\\repolens.exe"
+args = ["mcp", "D:\\Github\\project-a"]
+
+[mcp_servers.repolens_github_project_b_f4a29a11]
+command = "C:\\Users\\me\\bin\\repolens.exe"
+args = ["mcp", "D:\\Github\\project-b"]
 ```
 
 ### `enable`, `disable`, `mcp-status`
