@@ -7,7 +7,7 @@ RepoLens scans a repository, builds compact local indexes, and exposes code navi
 ## Links
 
 - 🚀 [Latest release](https://github.com/dandyArise/RepoLens/releases/latest)
-- 📦 [v0.1.9 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.9)
+- 📦 [v0.1.11 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.11)
 - ⚙️ [GitHub Actions builds](https://github.com/dandyArise/RepoLens/actions)
 - 🧩 [Windows installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.ps1)
 - 🧩 [Linux/macOS installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.sh)
@@ -194,7 +194,7 @@ iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.p
 ## Installer Options
 
 ```powershell
-.\install\install.ps1 -Version v0.1.9
+.\install\install.ps1 -Version v0.1.11
 .\install\install.ps1 -Action update
 .\install\install.ps1 -Action status -InitTarget all
 .\install\install.ps1 -Action disable -InitTarget codex
@@ -202,7 +202,7 @@ iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.p
 ```
 
 ```sh
-REPOLENS_VERSION=v0.1.9 sh install/install.sh
+REPOLENS_VERSION=v0.1.11 sh install/install.sh
 REPOLENS_ACTION=update sh install/install.sh
 REPOLENS_ACTION=status REPOLENS_INIT_TARGET=all sh install/install.sh
 REPOLENS_ACTION=disable REPOLENS_INIT_TARGET=codex sh install/install.sh
@@ -291,8 +291,8 @@ Published assets are available on the [latest release page](https://github.com/d
 To create a release:
 
 ```powershell
-git tag v0.1.9
-git push origin v0.1.9
+git tag v0.1.11
+git push origin v0.1.11
 ```
 
 During development:
@@ -641,6 +641,7 @@ Existing unrelated MCP servers are kept.
 Implemented tools:
 
 - `repolens_status`
+- `repolens_switch_workspace`
 - `repolens_snapshot`
 - `repolens_tree`
 - `repolens_search`
@@ -654,10 +655,26 @@ Implemented tools:
 - `repolens_changes`
 - `repolens_bundle`
 
+All MCP tools accept an optional `workspaceRoot` argument (or `root` alias). When provided, RepoLens loads that repository index on demand, caches it in the running MCP process, and makes it the active root for subsequent calls. This lets a long-lived agent session hot-switch between repositories without restarting the AI client.
+
+For safety, hot-switch roots must be explicitly allowed. RepoLens allows the initial MCP root, RepoLens roots registered in Codex config via `repolens init . --target codex`, and extra roots listed in `REPOLENS_MCP_ROOTS` separated by semicolons.
+
 Example JSON-RPC call:
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"repolens_status","arguments":{}}}
+```
+
+Hot-switch to another workspace:
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"repolens_switch_workspace","arguments":{"workspaceRoot":"D:\\Github\\DataBloom"}}}
+```
+
+Call one tool against a specific workspace:
+
+```json
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"repolens_search","arguments":{"workspaceRoot":"D:\\Github\\DataBloom","query":"askLmStudioAssistant","limit":5}}}
 ```
 
 Bundle example:
@@ -665,6 +682,8 @@ Bundle example:
 ```json
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"repolens_bundle","arguments":{"ops":[{"tool":"repolens_status","arguments":{}},{"tool":"repolens_search","arguments":{"query":"ProjectIndex","limit":3}}]}}}
 ```
+
+If `workspaceRoot` is passed to `repolens_bundle`, nested ops inherit it unless an op supplies its own `workspaceRoot`.
 
 ## Configuration ⚙️
 
