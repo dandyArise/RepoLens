@@ -243,17 +243,44 @@ Then restart your AI client. The client will receive a `repolens` MCP server tha
 repolens mcp <repo-root>
 ```
 
-For best results in agent workflows, add a short note to your project instructions:
+For best results in agent workflows, add RepoLens-first instructions to your project instructions:
 
 ```md
-Use RepoLens MCP tools first when available:
-- repolens_search
-- repolens_symbol
-- repolens_outline
-- repolens_deps
-- repolens_read
-- repolens_bundle
+# RepoLens
+
+Use RepoLens MCP tools before shell-based repository exploration when the
+`repolens_*` tools are available.
+
+First call `repolens_status` and confirm that `root` is the current repository.
+If the root is wrong or stale, do not rely on RepoLens results for the task.
+Run `repolens init . --target codex` from the correct project root and restart
+Codex so the MCP server is reloaded.
+
+Prefer:
+- `repolens_status` to verify the attached repository root.
+- `repolens_search` for text/code search.
+- `repolens_word` for identifier-like word lookup.
+- `repolens_symbol` for function/class/component/config symbol lookup.
+- `repolens_outline` for file/module structure.
+- `repolens_deps` for imports/dependencies of a file.
+- `repolens_rdeps` for reverse dependencies before changing shared code.
+- `repolens_read` for focused file reads and line ranges.
+- `repolens_bundle` when several small RepoLens calls provide better context.
+- `repolens_changes` to inspect watcher-tracked changes.
+- `repolens_snapshot` when index metadata is useful.
+
+Use normal shell/project commands for build, lint, tests, git, runtime logs,
+generated output, and exact live filesystem state after recent edits.
+
+For a new project:
+1. Run `repolens index .` to build the local index.
+2. Run `repolens init . --target codex` to register the project with Codex.
+3. Restart Codex before expecting the `repolens_*` MCP tools to appear.
 ```
+
+`index` and `init` do different jobs: `repolens index .` builds or refreshes
+the local `.repolens` index, while `repolens init . --target codex` writes the
+MCP registration for the current project root.
 
 ## Install From Source 🛠️
 
@@ -631,7 +658,7 @@ repolens disable --target all
 
 `disable` removes only RepoLens:
 
-- Codex: removes `[mcp_servers.repolens]`
+- Codex: removes RepoLens MCP project entries, including legacy `[mcp_servers.repolens]`
 - Claude Desktop/Cursor: removes `mcpServers.repolens`
 
 Existing unrelated MCP servers are kept.

@@ -914,6 +914,8 @@
         <span class="mcp-tool">repolens_snapshot</span>
         <span class="mcp-tool">repolens_bundle</span>
       </div>
+      <p style="color:var(--text-dim);font-size:.85rem;margin-top:1.25rem" data-fr="Workflow agent: commence par repolens_status, confirme que root pointe vers le repo courant, puis utilise search, word, symbol, outline, deps, rdeps et read avant les recherches shell larges." data-en="Agent workflow: start with repolens_status, confirm root points to the current repo, then use search, word, symbol, outline, deps, rdeps and read before broad shell searches.">Workflow agent: commence par repolens_status, confirme que root pointe vers le repo courant, puis utilise search, word, symbol, outline, deps, rdeps et read avant les recherches shell larges.</p>
+      <p style="color:var(--text-dim);font-size:.85rem;margin-top:.75rem" data-fr="Pour chaque nouveau projet: repolens index . construit l'index local; repolens init . --target codex enregistre ce root dans Codex. Redemarre Codex pour voir les outils repolens_*." data-en="For each new project: repolens index . builds the local index; repolens init . --target codex registers that root with Codex. Restart Codex before expecting the repolens_* tools.">Pour chaque nouveau projet: repolens index . construit l'index local; repolens init . --target codex enregistre ce root dans Codex. Redemarre Codex pour voir les outils repolens_*.</p>
     </div>
     <div class="terminal" style="margin-top:0">
       <div class="terminal-bar">
@@ -954,8 +956,10 @@
     <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:1rem" data-fr="Installe RepoLens une fois, puis active-le dans les projets où tu veux l'utiliser." data-en="Install RepoLens once, then enable it in the projects where you want to use it.">Installe RepoLens une fois, puis active-le dans les projets où tu veux l'utiliser.</p>
     <div class="code-block"><code>iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.ps1 -UseBasicParsing | iex</code><button class="copy-btn" onclick="copyCode(this, 'iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.ps1 -UseBasicParsing | iex')">COPY</button></div>
     <div class="code-block"><code>cd my-project</code><button class="copy-btn" onclick="copyCode(this, 'cd my-project')">COPY</button></div>
+    <div class="code-block"><code>repolens index .</code><button class="copy-btn" onclick="copyCode(this, 'repolens index .')">COPY</button></div>
     <div class="code-block"><code>repolens init . --target codex</code><button class="copy-btn" onclick="copyCode(this, 'repolens init . --target codex')">COPY</button></div>
     <div class="code-block"><code>repolens mcp-status --target codex</code><button class="copy-btn" onclick="copyCode(this, 'repolens mcp-status --target codex')">COPY</button></div>
+    <p style="color:var(--text-dim);font-size:.8rem;margin-top:1rem" data-fr="Apres init, redemarre ton client IA. Dans Codex, verifie ensuite /mcp et commence par repolens_status pour confirmer le root." data-en="After init, restart your AI client. In Codex, then check /mcp and start with repolens_status to confirm the root.">Apres init, redemarre ton client IA. Dans Codex, verifie ensuite /mcp et commence par repolens_status pour confirmer le root.</p>
   </div>
 
   <div class="tab-content" id="tab-release">
