@@ -7,7 +7,7 @@ RepoLens scans a repository, builds compact local indexes, and exposes code navi
 ## Links
 
 - 🚀 [Latest release](https://github.com/dandyArise/RepoLens/releases/latest)
-- 📦 [v0.1.9 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.9)
+- 📦 [v0.1.10 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.10)
 - ⚙️ [GitHub Actions builds](https://github.com/dandyArise/RepoLens/actions)
 - 🧩 [Windows installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.ps1)
 - 🧩 [Linux/macOS installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.sh)
@@ -194,7 +194,7 @@ iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.p
 ## Installer Options
 
 ```powershell
-.\install\install.ps1 -Version v0.1.9
+.\install\install.ps1 -Version v0.1.10
 .\install\install.ps1 -Action update
 .\install\install.ps1 -Action status -InitTarget all
 .\install\install.ps1 -Action disable -InitTarget codex
@@ -202,7 +202,7 @@ iwr https://raw.githubusercontent.com/dandyArise/RepoLens/main/install/install.p
 ```
 
 ```sh
-REPOLENS_VERSION=v0.1.9 sh install/install.sh
+REPOLENS_VERSION=v0.1.10 sh install/install.sh
 REPOLENS_ACTION=update sh install/install.sh
 REPOLENS_ACTION=status REPOLENS_INIT_TARGET=all sh install/install.sh
 REPOLENS_ACTION=disable REPOLENS_INIT_TARGET=codex sh install/install.sh
@@ -318,8 +318,8 @@ Published assets are available on the [latest release page](https://github.com/d
 To create a release:
 
 ```powershell
-git tag v0.1.9
-git push origin v0.1.9
+git tag v0.1.10
+git push origin v0.1.10
 ```
 
 During development:
