@@ -343,7 +343,7 @@ fn write_config_if_changed(path: &Path, existing: &str, next: String) -> Result<
     fs::write(path, next).with_context(|| format!("failed to write {}", path.display()))
 }
 
-fn write_json_mcp_config(path: &Path, exe: &Path, root: &Path) -> Result<()> {
+fn write_json_mcp_config(path: &Path, exe: &Path, _root: &Path) -> Result<()> {
     let mut config = if path.exists() {
         let raw = fs::read_to_string(path)
             .with_context(|| format!("failed to read {}", path.display()))?;
@@ -360,7 +360,7 @@ fn write_json_mcp_config(path: &Path, exe: &Path, root: &Path) -> Result<()> {
     }
     config["mcpServers"]["repolens"] = json!({
         "command": exe.to_string_lossy(),
-        "args": ["mcp", root.to_string_lossy()]
+        "args": ["mcp"]
     });
 
     if let Some(parent) = path.parent() {

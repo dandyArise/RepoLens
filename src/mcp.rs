@@ -28,6 +28,7 @@ struct Request {
 #[derive(Debug, Serialize)]
 struct Response {
     jsonrpc: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     result: Option<Value>,
@@ -49,6 +50,9 @@ pub fn serve(root: &Path) -> Result<()> {
     for line in stdin.lock().lines() {
         let line = line?;
         if line.trim().is_empty() {
+            continue;
+        }
+        if is_notification(&line) {
             continue;
         }
         let response = handle_line(&mut state, &line);
@@ -459,14 +463,27 @@ fn call_tool(state: &mut ServerState, params: Value) -> Result<Value> {
         .ok_or_else(|| anyhow!("missing tool name"))?;
     let args = params.get("arguments").cloned().unwrap_or(Value::Null);
 
-    let content = call_tool_raw(state, name, args)?;
+    match call_tool_raw(state, name, args) {
+        Ok(content) => Ok(json!({
+            "content": [{
+                "type": "text",
+                "text": serde_json::to_string_pretty(&content)?
+            }]
+        })),
+        Err(error) => Ok(json!({
+            "content": [{
+                "type": "text",
+                "text": error.to_string()
+            }],
+            "isError": true
+        })),
+    }
+}
 
-    Ok(json!({
-        "content": [{
-            "type": "text",
-            "text": serde_json::to_string_pretty(&content)?
-        }]
-    }))
+fn is_notification(line: &str) -> bool {
+    serde_json::from_str::<Value>(line)
+        .ok()
+        .is_some_and(|message| message.get("method").is_some() && message.get("id").is_none())
 }
 
 fn call_tool_raw(state: &mut ServerState, name: &str, args: Value) -> Result<Value> {
@@ -686,7 +703,7 @@ mod tests {
 
     use serde_json::json;
 
-    use super::{MAX_CACHED_ROOTS, ServerState, handle_line, tools};
+    use super::{MAX_CACHED_ROOTS, ServerState, handle_line, is_notification, tools};
 
     fn canonical(path: &std::path::Path) -> camino::Utf8PathBuf {
         camino::Utf8PathBuf::from_path_buf(dunce::canonicalize(path).unwrap()).unwrap()
@@ -736,6 +753,43 @@ mod tests {
             .to_string();
         assert!(text.contains("repolens_status"));
         assert!(text.contains("repolens_search"));
+    }
+
+    #[test]
+    fn omits_id_for_parse_errors() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = ServerState::new(temp.path()).unwrap();
+
+        let response = handle_line(&mut state, "{");
+        let serialized = serde_json::to_value(response).unwrap();
+
+        assert_eq!(serialized["error"]["code"], -32700);
+        assert!(serialized.get("id").is_none());
+    }
+
+    #[test]
+    fn recognizes_notifications_without_an_id() {
+        assert!(is_notification(
+            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#
+        ));
+        assert!(!is_notification(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#
+        ));
+    }
+
+    #[test]
+    fn returns_tool_errors_as_mcp_results() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = ServerState::new(temp.path()).unwrap();
+
+        let response = handle_line(
+            &mut state,
+            r#"{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"repolens_search","arguments":{}}}"#,
+        );
+
+        assert!(response.error.is_none());
+        assert_eq!(response.id, Some(json!(12)));
+        assert_eq!(response.result.unwrap()["isError"], true);
     }
 
     #[test]
@@ -827,7 +881,8 @@ mod tests {
         });
         let response = handle_line(&mut state, &request.to_string());
 
-        assert!(response.error.is_some());
+        assert!(response.error.is_none());
+        assert_eq!(response.result.unwrap()["isError"], true);
         assert_eq!(state.active_root, first_root);
     }
 
@@ -853,7 +908,8 @@ mod tests {
         });
         let response = handle_line(&mut state, &request.to_string());
 
-        assert!(response.error.is_some());
+        assert!(response.error.is_none());
+        assert_eq!(response.result.unwrap()["isError"], true);
         assert_eq!(state.active_root, first_root);
     }
 
@@ -911,7 +967,8 @@ mod tests {
         });
         let response = handle_line(&mut state, &request.to_string());
 
-        assert!(response.error.is_some());
+        assert!(response.error.is_none());
+        assert_eq!(response.result.unwrap()["isError"], true);
         assert_eq!(state.active_root, first_root);
     }
 

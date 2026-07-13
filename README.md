@@ -632,6 +632,8 @@ Current targets:
 repolens mcp <repo-root>
 ```
 
+For Claude Desktop and Cursor, the registration is global and starts with `repolens mcp` (without a pinned repository). Select a repository dynamically with `repolens_switch_workspace` or by passing `workspaceRoot` to a tool call. Codex keeps one entry per repository so its project roots remain explicit.
+
 Codex uses one stable MCP entry per repository. A legacy `[mcp_servers.repolens]` entry is migrated automatically to the project-specific naming scheme the next time `init --target codex` runs. Existing project registrations, unrelated MCP servers, comments, and formatting in `config.toml` are preserved.
 
 Example with two repositories:
