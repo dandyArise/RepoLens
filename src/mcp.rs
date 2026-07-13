@@ -42,8 +42,11 @@ struct RpcError {
     message: String,
 }
 
-pub fn serve(root: &Path) -> Result<()> {
-    let mut state = ServerState::new(root)?;
+pub fn serve(root: Option<&Path>) -> Result<()> {
+    let mut state = match root {
+        Some(root) => ServerState::new(root)?,
+        None => ServerState::without_root()?,
+    };
     let stdin = io::stdin();
     let mut stdout = io::stdout().lock();
 
@@ -65,7 +68,7 @@ pub fn serve(root: &Path) -> Result<()> {
 }
 
 struct ServerState {
-    active_root: Utf8PathBuf,
+    active_root: Option<Utf8PathBuf>,
     allowed_roots: HashMap<String, Utf8PathBuf>,
     indexes: HashMap<String, ProjectIndex>,
     cache_order: VecDeque<String>,
@@ -73,8 +76,17 @@ struct ServerState {
 
 impl ServerState {
     fn new(root: &Path) -> Result<Self> {
-        let allowed_roots = allowed_workspace_roots(root)?;
+        let allowed_roots = allowed_workspace_roots(Some(root))?;
         Self::with_allowed_roots(root, allowed_roots.into_values())
+    }
+
+    fn without_root() -> Result<Self> {
+        Ok(Self {
+            active_root: None,
+            allowed_roots: allowed_workspace_roots(None)?,
+            indexes: HashMap::new(),
+            cache_order: VecDeque::new(),
+        })
     }
 
     fn with_allowed_roots(
@@ -96,7 +108,7 @@ impl ServerState {
         cache_order.push_back(key);
 
         Ok(Self {
-            active_root,
+            active_root: Some(active_root),
             allowed_roots: allowed,
             indexes,
             cache_order,
@@ -126,7 +138,7 @@ impl ServerState {
             let index = snapshot::load_or_build(root.as_std_path())?;
             self.indexes.insert(key.clone(), index);
         }
-        self.active_root = root;
+        self.active_root = Some(root);
         self.touch_cache_key(key);
         self.evict_inactive_roots();
         Ok(())
@@ -136,10 +148,15 @@ impl ServerState {
         if let Some(root) = workspace_root_arg(args) {
             self.switch_root(Path::new(root))?;
         }
-        let key = root_key(&self.active_root);
+        let active_root = self.active_root.as_ref().ok_or_else(|| {
+            anyhow!(
+                "workspace root is required; pass workspaceRoot or call repolens_switch_workspace"
+            )
+        })?;
+        let key = root_key(active_root);
         self.indexes
             .get(&key)
-            .ok_or_else(|| anyhow!("active workspace is not indexed: {}", self.active_root))
+            .ok_or_else(|| anyhow!("active workspace is not indexed: {active_root}"))
     }
 
     fn allowed_root(&self, root: &Path) -> Result<Utf8PathBuf> {
@@ -164,7 +181,11 @@ impl ServerState {
             let Some(candidate) = self.cache_order.pop_front() else {
                 break;
             };
-            if candidate == root_key(&self.active_root) {
+            if self
+                .active_root
+                .as_ref()
+                .is_some_and(|active_root| candidate == root_key(active_root))
+            {
                 self.cache_order.push_back(candidate);
                 break;
             }
@@ -186,9 +207,11 @@ fn root_key(root: &Utf8Path) -> String {
     }
 }
 
-fn allowed_workspace_roots(initial_root: &Path) -> Result<HashMap<String, Utf8PathBuf>> {
+fn allowed_workspace_roots(initial_root: Option<&Path>) -> Result<HashMap<String, Utf8PathBuf>> {
     let mut roots = HashMap::new();
-    add_allowed_root(&mut roots, canonical_utf8(initial_root)?);
+    if let Some(initial_root) = initial_root {
+        add_allowed_root(&mut roots, canonical_utf8(initial_root)?);
+    }
     for root in env_allowed_roots().into_iter().chain(codex_config_roots()) {
         if let Ok(root) = canonical_utf8(&root) {
             add_allowed_root(&mut roots, root);
@@ -736,6 +759,19 @@ mod tests {
     }
 
     #[test]
+    fn starts_without_a_workspace_root() {
+        let mut state = ServerState::without_root().unwrap();
+        let response = handle_line(
+            &mut state,
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+        );
+
+        assert!(response.error.is_none());
+        assert!(response.result.unwrap()["tools"].is_array());
+        assert!(state.active_root.is_none());
+    }
+
+    #[test]
     fn handles_bundle() {
         let temp = tempfile::tempdir().unwrap();
         fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
@@ -855,7 +891,7 @@ mod tests {
         let text = tool_text(response);
         assert!(!text.contains("second.rs"));
         assert!(text.contains("allowed_roots"));
-        assert_eq!(state.active_root, canonical(second.path()));
+        assert_eq!(state.active_root, Some(canonical(second.path())));
     }
 
     #[test]
@@ -943,7 +979,7 @@ mod tests {
         let text = tool_text(response);
         assert!(text.contains("second.rs"));
         assert!(text.contains("first.rs"));
-        assert_eq!(state.active_root, canonical(first.path()));
+        assert_eq!(state.active_root, Some(canonical(first.path())));
     }
 
     #[test]

@@ -83,8 +83,7 @@ pub enum Command {
         install_dir: Option<PathBuf>,
     },
     Mcp {
-        #[arg(default_value = ".")]
-        root: PathBuf,
+        root: Option<PathBuf>,
     },
     Serve {
         #[arg(default_value = ".")]

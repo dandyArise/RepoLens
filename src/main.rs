@@ -94,7 +94,7 @@ fn main() -> Result<()> {
             self_update::run(&version, install_dir)?;
         }
         Command::Mcp { root } => {
-            mcp::serve(&root)?;
+            mcp::serve(root.as_deref())?;
         }
         Command::Serve { root, host, port } => {
             http::serve(&root, &host, port)?;
