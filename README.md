@@ -153,7 +153,8 @@ If it still fails, run with the full path:
 
 ### I installed it, but the AI client does not see RepoLens
 
-Run `init` from the project folder, then restart the AI client:
+Run `init` from the project folder. Restart the AI client only if the
+`repolens_*` tools are not loaded yet:
 
 ```powershell
 cd <your-project-folder>
@@ -237,7 +238,7 @@ repolens disable --target all
 
 `disable` only removes RepoLens from the client MCP config. It keeps the rest of the config file and writes a `.bak` backup first.
 
-Then restart your AI client. The client will receive a `repolens` MCP server that runs:
+On the first registration, restart your AI client so it receives a `repolens` MCP server that runs:
 
 ```text
 repolens mcp <repo-root>
@@ -253,8 +254,10 @@ Use RepoLens MCP tools before shell-based repository exploration when the
 
 First call `repolens_status` and confirm that `root` is the current repository.
 If the root is wrong or stale, do not rely on RepoLens results for the task.
-Run `repolens init . --target codex` from the correct project root and restart
-Codex so the MCP server is reloaded.
+Run `repolens init . --target codex` from the correct project root, then retry
+`repolens_status` with that root. A running RepoLens server reloads Codex
+registrations automatically; restart Codex only if the tools are absent or the
+client is still using an older RepoLens binary.
 
 Prefer:
 - `repolens_status` to verify the attached repository root.
@@ -275,7 +278,8 @@ generated output, and exact live filesystem state after recent edits.
 For a new project:
 1. Run `repolens index .` to build the local index.
 2. Run `repolens init . --target codex` to register the project with Codex.
-3. Restart Codex before expecting the `repolens_*` MCP tools to appear.
+3. If the `repolens_*` tools are not loaded yet, restart Codex once. An existing
+   RepoLens transport can use newly registered project roots without a restart.
 ```
 
 `index` and `init` do different jobs: `repolens index .` builds or refreshes
@@ -686,7 +690,7 @@ Implemented tools:
 
 All MCP tools accept an optional `workspaceRoot` argument (or `root` alias). When provided, RepoLens loads that repository index on demand, caches it in the running MCP process, and makes it the active root for subsequent calls. This lets a long-lived agent session hot-switch between repositories without restarting the AI client.
 
-For safety, hot-switch roots must be explicitly allowed. RepoLens allows the initial MCP root, RepoLens roots registered in Codex config via `repolens init . --target codex`, and extra roots listed in `REPOLENS_MCP_ROOTS` separated by semicolons.
+For safety, hot-switch roots must be explicitly allowed. RepoLens allows the initial MCP root, RepoLens roots registered in Codex config via `repolens init . --target codex`, and extra roots listed in `REPOLENS_MCP_ROOTS` separated by semicolons. Running MCP servers reload the Codex registrations before switching workspaces and when reporting status, so a newly registered project becomes available without restarting the AI client.
 
 Example JSON-RPC call:
 

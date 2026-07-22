@@ -69,29 +69,49 @@ pub fn serve(root: Option<&Path>) -> Result<()> {
 
 struct ServerState {
     active_root: Option<Utf8PathBuf>,
+    fixed_allowed_roots: HashMap<String, Utf8PathBuf>,
     allowed_roots: HashMap<String, Utf8PathBuf>,
+    codex_config_path: Option<PathBuf>,
     indexes: HashMap<String, ProjectIndex>,
     cache_order: VecDeque<String>,
 }
 
 impl ServerState {
     fn new(root: &Path) -> Result<Self> {
-        let allowed_roots = allowed_workspace_roots(Some(root))?;
-        Self::with_allowed_roots(root, allowed_roots.into_values())
+        let fixed_allowed_roots = fixed_workspace_roots(Some(root))?;
+        Self::with_allowed_roots_and_codex_config(
+            root,
+            fixed_allowed_roots.into_values(),
+            Some(codex_config_path()),
+        )
     }
 
     fn without_root() -> Result<Self> {
-        Ok(Self {
+        let fixed_allowed_roots = fixed_workspace_roots(None)?;
+        let mut state = Self {
             active_root: None,
-            allowed_roots: allowed_workspace_roots(None)?,
+            allowed_roots: fixed_allowed_roots.clone(),
+            fixed_allowed_roots,
+            codex_config_path: Some(codex_config_path()),
             indexes: HashMap::new(),
             cache_order: VecDeque::new(),
-        })
+        };
+        state.refresh_allowed_roots();
+        Ok(state)
     }
 
+    #[cfg(test)]
     fn with_allowed_roots(
         root: &Path,
         allowed_roots: impl IntoIterator<Item = Utf8PathBuf>,
+    ) -> Result<Self> {
+        Self::with_allowed_roots_and_codex_config(root, allowed_roots, None)
+    }
+
+    fn with_allowed_roots_and_codex_config(
+        root: &Path,
+        allowed_roots: impl IntoIterator<Item = Utf8PathBuf>,
+        codex_config_path: Option<PathBuf>,
     ) -> Result<Self> {
         let index = snapshot::load_or_build(root)?;
         let active_root = index.root.clone();
@@ -107,12 +127,16 @@ impl ServerState {
         let mut cache_order = VecDeque::new();
         cache_order.push_back(key);
 
-        Ok(Self {
+        let mut state = Self {
             active_root: Some(active_root),
+            fixed_allowed_roots: allowed.clone(),
             allowed_roots: allowed,
+            codex_config_path,
             indexes,
             cache_order,
-        })
+        };
+        state.refresh_allowed_roots();
+        Ok(state)
     }
 
     fn cached_roots(&self) -> Vec<Utf8PathBuf> {
@@ -132,6 +156,7 @@ impl ServerState {
     }
 
     fn switch_root(&mut self, root: &Path) -> Result<()> {
+        self.refresh_allowed_roots();
         let root = self.allowed_root(root)?;
         let key = root_key(&root);
         if !self.indexes.contains_key(&key) {
@@ -142,6 +167,23 @@ impl ServerState {
         self.touch_cache_key(key);
         self.evict_inactive_roots();
         Ok(())
+    }
+
+    fn refresh_allowed_roots(&mut self) {
+        let Some(path) = &self.codex_config_path else {
+            return;
+        };
+        let Some(config_roots) = codex_config_roots(path) else {
+            return;
+        };
+
+        let mut allowed_roots = self.fixed_allowed_roots.clone();
+        for root in config_roots {
+            if let Ok(root) = canonical_utf8(&root) {
+                add_allowed_root(&mut allowed_roots, root);
+            }
+        }
+        self.allowed_roots = allowed_roots;
     }
 
     fn index_for_args(&mut self, args: &Value) -> Result<&ProjectIndex> {
@@ -207,12 +249,12 @@ fn root_key(root: &Utf8Path) -> String {
     }
 }
 
-fn allowed_workspace_roots(initial_root: Option<&Path>) -> Result<HashMap<String, Utf8PathBuf>> {
+fn fixed_workspace_roots(initial_root: Option<&Path>) -> Result<HashMap<String, Utf8PathBuf>> {
     let mut roots = HashMap::new();
     if let Some(initial_root) = initial_root {
         add_allowed_root(&mut roots, canonical_utf8(initial_root)?);
     }
-    for root in env_allowed_roots().into_iter().chain(codex_config_roots()) {
+    for root in env_allowed_roots() {
         if let Ok(root) = canonical_utf8(&root) {
             add_allowed_root(&mut roots, root);
         }
@@ -237,22 +279,27 @@ fn env_allowed_roots() -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
-fn codex_config_roots() -> Vec<PathBuf> {
-    let path = home_dir().join(".codex").join("config.toml");
-    let Ok(raw) = fs::read_to_string(path) else {
-        return Vec::new();
+fn codex_config_path() -> PathBuf {
+    home_dir().join(".codex").join("config.toml")
+}
+
+fn codex_config_roots(path: &Path) -> Option<Vec<PathBuf>> {
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Some(Vec::new()),
+        Err(_) => return None,
     };
-    let Ok(document) = raw.parse::<DocumentMut>() else {
-        return Vec::new();
-    };
+    let document = raw.parse::<DocumentMut>().ok()?;
     let Some(servers) = document.get("mcp_servers").and_then(Item::as_table) else {
-        return Vec::new();
+        return Some(Vec::new());
     };
 
-    servers
-        .iter()
-        .filter_map(|(_, item)| codex_entry_root(item))
-        .collect()
+    Some(
+        servers
+            .iter()
+            .filter_map(|(_, item)| codex_entry_root(item))
+            .collect(),
+    )
 }
 
 fn codex_entry_root(item: &Item) -> Option<PathBuf> {
@@ -532,6 +579,7 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
             })
         }
         "repolens_status" => {
+            state.refresh_allowed_roots();
             let (
                 root,
                 files,
@@ -920,6 +968,37 @@ mod tests {
         assert!(response.error.is_none());
         assert_eq!(response.result.unwrap()["isError"], true);
         assert_eq!(state.active_root, first_root);
+    }
+
+    #[test]
+    fn reloads_new_codex_root_without_restarting_the_server() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let config_dir = tempfile::tempdir().unwrap();
+        let config_path = config_dir.path().join("config.toml");
+        fs::write(first.path().join("first.rs"), "fn alpha() {}\n").unwrap();
+        fs::write(second.path().join("second.rs"), "fn beta() {}\n").unwrap();
+        let mut state = ServerState::with_allowed_roots_and_codex_config(
+            first.path(),
+            [],
+            Some(config_path.clone()),
+        )
+        .unwrap();
+
+        assert!(state.switch_root(second.path()).is_err());
+
+        let second_root = serde_json::to_string(&second.path().to_string_lossy()).unwrap();
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.repolens_dynamic]\ncommand = \"repolens\"\nargs = [\"mcp\", {second_root}]\n"
+            ),
+        )
+        .unwrap();
+
+        state.switch_root(second.path()).unwrap();
+        assert_eq!(state.active_root, Some(canonical(second.path())));
+        assert!(state.allowed_roots().contains(&canonical(second.path())));
     }
 
     #[test]
