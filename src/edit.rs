@@ -67,6 +67,11 @@ pub fn apply(
 
     let text = String::from_utf8(bytes).context("refusing to edit non-utf8 file")?;
     let next = apply_to_text(&text, op, start, end, content)?;
+    if rel_path == Utf8Path::new(".repolensrc.toml")
+        || (cfg!(windows) && rel_path.as_str().eq_ignore_ascii_case(".repolensrc.toml"))
+    {
+        Config::parse(&next).context("refusing invalid RepoLens configuration edit")?;
+    }
     let next_hash = blake3::hash(next.as_bytes()).to_hex().to_string();
 
     atomic_write(&target, next.as_bytes())?;
@@ -183,6 +188,63 @@ mod tests {
 
     use super::apply_to_text;
     use crate::cli::EditOpArg;
+
+    #[test]
+    fn invalid_repolens_config_edit_leaves_file_and_snapshots_unchanged() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join(".repolensrc.toml");
+        let original = "include_hidden=true\n";
+        fs::write(&path, original).unwrap();
+        let index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        crate::snapshot::save(&index).unwrap();
+        let json_path = temp.path().join(".repolens/index.json");
+        let bin_path = temp.path().join(".repolens/index.bin");
+        let json_before = fs::read(&json_path).unwrap();
+        let bin_before = fs::read(&bin_path).unwrap();
+        let hash = blake3::hash(original.as_bytes()).to_hex();
+        for invalid in [
+            "invalid=[",
+            "include_hidden='yes'",
+            "max_file_size='invalid'",
+            "max_file_size='18446744073709551615mb'",
+        ] {
+            assert!(
+                super::apply(
+                    temp.path(),
+                    Utf8Path::new(".repolensrc.toml"),
+                    EditOpArg::Replace,
+                    1,
+                    None,
+                    Some(invalid),
+                    hash.as_ref()
+                )
+                .is_err()
+            );
+            assert_eq!(fs::read_to_string(&path).unwrap(), original);
+            assert_eq!(fs::read(&json_path).unwrap(), json_before);
+            assert_eq!(fs::read(&bin_path).unwrap(), bin_before);
+            assert!(
+                crate::config::Config::load(temp.path())
+                    .unwrap()
+                    .include_hidden
+            );
+        }
+        super::apply(
+            temp.path(),
+            Utf8Path::new(".repolensrc.toml"),
+            EditOpArg::Replace,
+            1,
+            None,
+            Some("include_hidden=false\n"),
+            hash.as_ref(),
+        )
+        .unwrap();
+        assert!(
+            !crate::config::Config::load(temp.path())
+                .unwrap()
+                .include_hidden
+        );
+    }
 
     #[test]
     fn unterminated_edit_content_preserves_following_line() {

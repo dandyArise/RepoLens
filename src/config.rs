@@ -27,7 +27,11 @@ impl Config {
 
         let raw = fs::read_to_string(&path)
             .with_context(|| format!("failed to read {}", path.display()))?;
-        let raw: RawConfig = toml::from_str(&raw).context("invalid .repolensrc.toml")?;
+        Self::parse(&raw)
+    }
+
+    pub(crate) fn parse(text: &str) -> Result<Self> {
+        let raw: RawConfig = toml::from_str(text).context("invalid .repolensrc.toml")?;
         Ok(Self {
             max_file_size: raw
                 .max_file_size
