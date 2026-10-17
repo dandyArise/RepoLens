@@ -70,14 +70,15 @@ fn load_current_index(
     rel_path: &camino::Utf8Path,
     actual_hash: &str,
 ) -> Result<ProjectIndex> {
-    let index = snapshot::load_or_build(root.as_std_path())?;
+    let mut index = snapshot::load_or_build(root.as_std_path())?;
     if index
         .file_by_path(&rel_path.to_path_buf())
         .is_some_and(|file| file.hash == actual_hash)
     {
         return Ok(index);
     }
-    ProjectIndex::build(root.as_std_path())
+    index.analyze_explicit_file(&rel_path.to_path_buf())?;
+    Ok(index)
 }
 
 fn build_report(
@@ -185,6 +186,30 @@ fn summary(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn explicit_ignored_file_has_real_symbols_without_index_inclusion() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join(".gitignore"), "ignored.rs\n").unwrap();
+        let text = "fn ignored_function() {}\n";
+        std::fs::write(temp.path().join("ignored.rs"), text).unwrap();
+        let root = crate::pathing::canonical_utf8(temp.path()).unwrap();
+        let index = super::load_current_index(
+            &root,
+            Utf8Path::new("ignored.rs"),
+            blake3::hash(text.as_bytes()).to_hex().as_ref(),
+        )
+        .unwrap();
+        let report = super::build_report(&index, Utf8Path::new("ignored.rs"), text.len());
+        assert_eq!(report.symbols.functions, 1);
+        assert!(!report.fallback);
+        assert!(
+            !ProjectIndex::build(temp.path())
+                .unwrap()
+                .files
+                .iter()
+                .any(|f| f.path == "ignored.rs")
+        );
+    }
     use camino::Utf8Path;
 
     use crate::index::ProjectIndex;

@@ -425,6 +425,7 @@ Read levels:
 
 Compact and aggressive reads preserve original source line numbers. The `--lines` range uses source coordinates; generated omission notices have no line number.
 The aggressive output limit is applied within the requested source range.
+Compact reads preserve complete multiline function signatures. Explicit reads and smart summaries can analyze ignored files without adding them to saved indexes; sensitive-path restrictions still apply.
 
 `read` records local usage estimates in `.repolens/usage.jsonl` when it can write there. Logging never blocks the read command.
 

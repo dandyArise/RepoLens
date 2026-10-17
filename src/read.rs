@@ -215,14 +215,15 @@ fn load_current_index(
     rel_path: &camino::Utf8Path,
     actual_hash: &str,
 ) -> Result<ProjectIndex> {
-    let index = snapshot::load_or_build(root.as_std_path())?;
+    let mut index = snapshot::load_or_build(root.as_std_path())?;
     if index
         .file_by_path(&rel_path.to_path_buf())
         .is_some_and(|file| file.hash == actual_hash)
     {
         return Ok(index);
     }
-    ProjectIndex::build(root.as_std_path())
+    index.analyze_explicit_file(&rel_path.to_path_buf())?;
+    Ok(index)
 }
 
 // Generated annotations have no source coordinate and must never shift source lines.
@@ -245,7 +246,11 @@ fn compact_with_symbols(content: &str, symbols: &[Symbol]) -> Vec<ReadLine> {
             matches!(symbol.kind, SymbolKind::Function | SymbolKind::Method)
                 && symbol.end_line.saturating_sub(symbol.line) + 1 > COMPACT_MAX_FUNCTION_LINES
         })
-        .map(|symbol| (symbol.line, symbol.end_line))
+        .filter_map(|symbol| {
+            symbol
+                .signature_end_line
+                .map(|header| (symbol.line, header, symbol.end_line))
+        })
         .collect::<Vec<_>>();
     omissions.sort_unstable();
 
@@ -254,9 +259,16 @@ fn compact_with_symbols(content: &str, symbols: &[Symbol]) -> Vec<ReadLine> {
         if line_no <= skip_until {
             continue;
         }
-        if let Some((_, end)) = omissions.iter().find(|(start, _)| *start == line_no) {
-            out.push((Some(line_no), line.to_string()));
-            let omitted = end.saturating_sub(line_no);
+        if let Some((_, header, end)) = omissions.iter().find(|(start, _, _)| *start == line_no) {
+            for (offset, header_line) in content
+                .lines()
+                .enumerate()
+                .skip(idx)
+                .take(header.saturating_sub(line_no) + 1)
+            {
+                out.push((Some(offset + 1), header_line.to_owned()));
+            }
+            let omitted = end.saturating_sub(*header);
             out.push((
                 None,
                 format!(
@@ -448,6 +460,85 @@ fn parse_line_range(raw: &str) -> Result<(usize, usize)> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn compact_preserves_multiline_function_signatures() {
+        let temp = tempfile::tempdir().unwrap();
+        let text = format!(
+            "pub fn example(\n    value: i32,\n) -> i32 {{\n{}    value\n}}\n",
+            "    let x = value;\n".repeat(25)
+        );
+        std::fs::write(temp.path().join("long.rs"), text).unwrap();
+        let out = super::read_text_with_level(
+            temp.path(),
+            camino::Utf8Path::new("long.rs"),
+            None,
+            super::ReadLevel::Compact,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(out.content.contains("2:     value: i32,"));
+        assert!(out.content.contains("3: ) -> i32 {"));
+        assert!(!out.content.contains("let x"));
+        for (name, text, expected) in [
+            (
+                "long.js",
+                format!(
+                    "function example(\n    value\n) {{\n{}    return value;\n}}\n",
+                    "    let x = value;\n".repeat(25)
+                ),
+                "3: ) {",
+            ),
+            (
+                "long.py",
+                format!(
+                    "def example(\n    value: int,\n) -> int:\n{}    return value\n",
+                    "    x = value\n".repeat(25)
+                ),
+                "3: ) -> int:",
+            ),
+        ] {
+            std::fs::write(temp.path().join(name), text).unwrap();
+            let out = super::read_text_with_level(
+                temp.path(),
+                camino::Utf8Path::new(name),
+                None,
+                super::ReadLevel::Compact,
+                None,
+                None,
+            )
+            .unwrap();
+            assert!(out.content.contains(expected), "{}", out.content);
+            assert!(out.content.contains("2:     value"));
+            assert!(!out.content.contains("x = value"));
+        }
+    }
+
+    #[test]
+    fn explicit_ignored_file_is_parsed_without_persisting_it() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join(".gitignore"), "ignored.rs\n").unwrap();
+        std::fs::write(temp.path().join("ignored.rs"), "fn ignored_function() {}\n").unwrap();
+        let index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        crate::snapshot::save(&index).unwrap();
+        let out = super::read_text_with_level(
+            temp.path(),
+            camino::Utf8Path::new("ignored.rs"),
+            None,
+            super::ReadLevel::Aggressive,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(out.content.contains("ignored_function"));
+        assert!(
+            !crate::snapshot::load_or_build(temp.path())
+                .unwrap()
+                .files
+                .iter()
+                .any(|f| f.path == "ignored.rs")
+        );
+    }
     #[test]
     fn aggressive_limits_apply_after_source_range_for_parser_and_fallback() {
         let temp = tempfile::tempdir().unwrap();

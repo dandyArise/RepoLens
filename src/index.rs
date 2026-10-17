@@ -18,7 +18,7 @@ use crate::symbols::{self, Symbol};
 pub type FileId = u32;
 pub type SymbolId = u32;
 // Increment when persisted indexing semantics change, even if the layout does not.
-pub const INDEX_VERSION: u32 = 8;
+pub const INDEX_VERSION: u32 = 9;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectIndex {
@@ -129,6 +129,21 @@ impl ProjectIndex {
         {
             return self.remove_file(path);
         }
+        self.update_file_contents(path)
+    }
+
+    // Transient analysis for explicitly requested files; callers never save this index.
+    pub fn analyze_explicit_file(&mut self, path: &Utf8PathBuf) -> Result<()> {
+        let (target, relative) = crate::pathing::resolve_in_root(&self.root, path)?;
+        let config = Config::load(self.root.as_std_path())?;
+        if !config.allow_sensitive && crate::security::is_sensitive_path(target.as_std_path()) {
+            anyhow::bail!("refusing to analyze sensitive path");
+        }
+        self.update_file_contents(&relative)
+    }
+
+    fn update_file_contents(&mut self, path: &Utf8PathBuf) -> Result<()> {
+        let full_path = self.root.join(path);
         let id = self
             .file_by_path(path)
             .map(|file| file.id)
@@ -343,6 +358,23 @@ fn line_offsets(text: &str) -> Vec<u64> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn explicit_file_analysis_rejects_sensitive_and_outside_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("credentials.rs"), "fn secret() {}\n").unwrap();
+        std::fs::write(outside.path().join("outside.rs"), "fn outside() {}\n").unwrap();
+        let mut index = ProjectIndex::build(temp.path()).unwrap();
+        assert!(
+            index
+                .analyze_explicit_file(&"credentials.rs".into())
+                .is_err()
+        );
+        let outside_path =
+            camino::Utf8PathBuf::from_path_buf(outside.path().join("outside.rs")).unwrap();
+        assert!(index.analyze_explicit_file(&outside_path).is_err());
+        assert!(index.files.is_empty());
+    }
     use std::fs;
 
     use camino::Utf8PathBuf;
@@ -367,6 +399,7 @@ mod tests {
             line: 1,
             column: 1,
             end_line: 1,
+            signature_end_line: None,
         }];
 
         let index = index_symbols_by_name(&symbols);

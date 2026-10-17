@@ -14,6 +14,8 @@ pub struct Symbol {
     pub line: usize,
     pub column: usize,
     pub end_line: usize,
+    #[serde(default)]
+    pub signature_end_line: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -249,6 +251,7 @@ pub fn extract_yaml_symbols(file_id: FileId, path: &Utf8PathBuf, text: &str) -> 
                 line: idx + 1,
                 column: line.len() - trimmed.len() + 1,
                 end_line: idx + 1,
+                signature_end_line: None,
             })
         })
         .collect()
@@ -496,6 +499,7 @@ fn symbol_from_node(
         line: start.row + 1,
         column: start.column + 1,
         end_line: end.row + 1,
+        signature_end_line: signature_end_line(node),
     })
 }
 
@@ -556,6 +560,7 @@ fn ts_like_symbol_from_node(
         line: start.row + 1,
         column: start.column + 1,
         end_line: end.row + 1,
+        signature_end_line: signature_end_line(node),
     })
 }
 
@@ -629,6 +634,7 @@ fn python_symbol_from_node(
         line: start.row + 1,
         column: start.column + 1,
         end_line: end.row + 1,
+        signature_end_line: signature_end_line(node),
     })
 }
 
@@ -687,6 +693,7 @@ fn go_symbol_from_node(
         line: start.row + 1,
         column: start.column + 1,
         end_line: end.row + 1,
+        signature_end_line: signature_end_line(node),
     })
 }
 
@@ -746,6 +753,7 @@ fn php_symbol_from_node(
         line: start.row + 1,
         column: start.column + 1,
         end_line: end.row + 1,
+        signature_end_line: signature_end_line(node),
     })
 }
 
@@ -856,6 +864,7 @@ fn make_symbol(
         line: start.row + 1,
         column: start.column + 1,
         end_line: end.row + 1,
+        signature_end_line: signature_end_line(node),
     }
 }
 
@@ -1012,7 +1021,30 @@ fn config_symbol(
         line,
         column,
         end_line: line,
+        signature_end_line: None,
     }
+}
+
+fn signature_end_line(node: Node) -> Option<usize> {
+    let function = if node.kind() == "variable_declarator" {
+        node.child_by_field_name("value")?
+    } else {
+        node
+    };
+    let body = function.child_by_field_name("body")?;
+    let row = body.start_position().row;
+    Some(
+        if matches!(body.kind(), "block" | "body_statement")
+            && matches!(
+                function.kind(),
+                "function_definition" | "method" | "singleton_method"
+            )
+        {
+            row.max(function.start_position().row + 1)
+        } else {
+            row + 1
+        },
+    )
 }
 
 fn impl_name(node: Node, source: &[u8]) -> Option<String> {

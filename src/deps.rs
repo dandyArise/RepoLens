@@ -543,7 +543,100 @@ fn clean_rust_use(text: &str) -> String {
 }
 
 fn literal_module(node: Node, source: &[u8]) -> Option<String> {
-    (node.kind() == "string").then(|| clean_string(node.utf8_text(source).unwrap_or_default()))
+    if !matches!(node.kind(), "string" | "template_string") || node.has_error() {
+        return None;
+    }
+    if node
+        .named_children(&mut node.walk())
+        .any(|child| child.kind() == "template_substitution")
+    {
+        return None;
+    }
+    decode_js_literal(node.utf8_text(source).ok()?)
+}
+
+fn decode_js_literal(text: &str) -> Option<String> {
+    let delimiter = text.chars().next()?;
+    if !matches!(delimiter, '\'' | '"' | '`') || !text.ends_with(delimiter) || text.len() < 2 {
+        return None;
+    }
+    let mut chars = text[1..text.len() - 1].chars().peekable();
+    let mut decoded = String::new();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            if ch == '\r' && delimiter == '`' {
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                decoded.push('\n');
+            } else {
+                decoded.push(ch);
+            }
+            continue;
+        }
+        match chars.next()? {
+            '\n' | '\u{2028}' | '\u{2029}' => {}
+            '\r' => {
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+            }
+            'n' => decoded.push('\n'),
+            'r' => decoded.push('\r'),
+            't' => decoded.push('\t'),
+            'b' => decoded.push('\u{8}'),
+            'f' => decoded.push('\u{c}'),
+            'v' => decoded.push('\u{b}'),
+            '0' if !chars.peek().is_some_and(char::is_ascii_digit) => decoded.push('\0'),
+            // Legacy octal escapes are deliberately not guessed as module names.
+            '0'..='9' => return None,
+            'x' => decoded.push(char::from_u32(js_hex_digits(&mut chars, 2)?)?),
+            'u' => {
+                let value = if chars.peek() == Some(&'{') {
+                    chars.next();
+                    let mut value = 0u32;
+                    let mut count = 0;
+                    loop {
+                        let ch = chars.next()?;
+                        if ch == '}' {
+                            break;
+                        }
+                        value = value.checked_mul(16)?.checked_add(ch.to_digit(16)?)?;
+                        count += 1;
+                    }
+                    if count == 0 {
+                        return None;
+                    }
+                    value
+                } else {
+                    js_hex_digits(&mut chars, 4)?
+                };
+                let value = if (0xd800..=0xdbff).contains(&value) {
+                    if chars.next()? != '\\' || chars.next()? != 'u' {
+                        return None;
+                    }
+                    let low = js_hex_digits(&mut chars, 4)?;
+                    if !(0xdc00..=0xdfff).contains(&low) {
+                        return None;
+                    }
+                    0x10000 + ((value - 0xd800) << 10) + low - 0xdc00
+                } else {
+                    value
+                };
+                decoded.push(char::from_u32(value)?);
+            }
+            escaped => decoded.push(escaped),
+        }
+    }
+    Some(decoded)
+}
+
+fn js_hex_digits(chars: &mut impl Iterator<Item = char>, count: usize) -> Option<u32> {
+    let mut value = 0;
+    for _ in 0..count {
+        value = value * 16 + chars.next()?.to_digit(16)?;
+    }
+    Some(value)
 }
 
 fn call_name(node: Node, source: &[u8]) -> Option<String> {
@@ -581,6 +674,49 @@ fn collect_string_literals(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn javascript_module_literals_decode_escapes_and_static_templates() {
+        let files = vec![file(0, "main.js"), file(1, "lib.js")];
+        let source = concat!(
+            r#"require('./lib\u002ejs'); require("./lib\x2ejs"); "#,
+            r#"require(`./lib.js`); import(`./lib\u{2e}js`); "#,
+            "require('./li\\\nb.js'); ",
+            r#"import x from './lib\u002ejs'; export * from './lib\x2ejs';"#,
+        );
+        let mut deps = vec![super::extract_ts_like_deps(0, &"main.js".into(), source).unwrap()];
+        super::resolve_relative_ts_js_imports(&mut deps, &files);
+        assert_eq!(deps[0].imports.len(), 7);
+        assert!(
+            deps[0]
+                .imports
+                .iter()
+                .all(|i| i.module == "./lib.js" && i.resolved_file_id == Some(1))
+        );
+        let (forward, reverse) = super::build_graph(&deps);
+        assert_eq!(forward.get(&0), Some(&vec![1]));
+        assert_eq!(reverse.get(&1), Some(&vec![0]));
+    }
+
+    #[test]
+    fn javascript_module_literals_preserve_escaped_characters_without_evaluating_expressions() {
+        let source = r#"require('./a\\b.js'); require('./it\'s.js'); require("./a\"b.js"); require(`./\${literal}.js`); require('./\uD83D\uDE00.js'); require(`./\u{1f600}.js`); require(`./${name}.js`); require('./base'+'.js'); require(`./base`+'.js');"#;
+        let deps = super::extract_ts_like_deps(0, &"main.js".into(), source).unwrap();
+        assert_eq!(
+            deps.imports
+                .iter()
+                .map(|i| i.module.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "./a\\b.js",
+                "./it's.js",
+                "./a\"b.js",
+                "./${literal}.js",
+                "./😀.js",
+                "./😀.js"
+            ]
+        );
+    }
+
     #[test]
     fn reexports_and_literal_dynamic_imports_build_graph_edges() {
         let files = vec![file(0, "main.js"), file(1, "lib.js")];
