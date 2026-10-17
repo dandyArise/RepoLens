@@ -87,8 +87,16 @@ pub fn status(target: InitTargetArg) -> Result<()> {
     Ok(())
 }
 
-fn codex_config_path() -> PathBuf {
-    home_dir().join(".codex").join("config.toml")
+pub(crate) fn codex_config_path() -> PathBuf {
+    codex_config_path_from(std::env::var_os("CODEX_HOME").as_deref(), &home_dir())
+}
+
+fn codex_config_path_from(codex_home: Option<&std::ffi::OsStr>, home: &Path) -> PathBuf {
+    codex_home
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".codex"))
+        .join("config.toml")
 }
 
 fn claude_config_path() -> PathBuf {
@@ -303,6 +311,7 @@ fn write_codex_server(servers: &mut Table, name: &str, exe: &Path, root: &Path) 
     args.push("mcp");
     args.push(root.to_string_lossy().as_ref());
     server["args"] = value(args);
+    server["enabled"] = value(true);
 }
 
 fn codex_entry_root(item: &Item) -> Option<PathBuf> {
@@ -432,7 +441,15 @@ fn codex_project_count(path: &Path) -> Result<usize> {
     let Some(servers) = document.get("mcp_servers").and_then(Item::as_table) else {
         return Ok(0);
     };
-    Ok(repolens_codex_entries(servers).len())
+    Ok(repolens_codex_entries(servers)
+        .into_iter()
+        .filter(|(name, _)| {
+            servers[name.as_str()]
+                .get("enabled")
+                .and_then(Item::as_bool)
+                != Some(false)
+        })
+        .count())
 }
 
 fn json_mcp_enabled(path: &Path) -> Result<bool> {
@@ -484,6 +501,67 @@ mod tests {
         codex_project_count, codex_server_name, json_mcp_enabled, remove_codex_config,
         remove_json_mcp_config, repolens_codex_entries, write_codex_config,
     };
+
+    #[test]
+    fn codex_home_overrides_default_and_empty_value_falls_back() {
+        let home = Path::new("user-home");
+        assert_eq!(
+            super::codex_config_path_from(Some(std::ffi::OsStr::new("custom-codex")), home),
+            Path::new("custom-codex").join("config.toml")
+        );
+        for codex_home in [None, Some(std::ffi::OsStr::new(""))] {
+            assert_eq!(
+                super::codex_config_path_from(codex_home, home),
+                home.join(".codex").join("config.toml")
+            );
+        }
+    }
+
+    #[test]
+    fn custom_codex_home_registration_status_and_removal_leave_default_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let custom_home = dir.path().join("custom-codex");
+        let default_path = home.join(".codex").join("config.toml");
+        std::fs::create_dir_all(default_path.parent().unwrap()).unwrap();
+        std::fs::write(&default_path, "# default must remain unchanged\n").unwrap();
+        let path = super::codex_config_path_from(Some(custom_home.as_os_str()), &home);
+        write_codex_config(&path, Path::new("repolens.exe"), dir.path()).unwrap();
+        assert_eq!(codex_project_count(&path).unwrap(), 1);
+        remove_codex_config(&path).unwrap();
+        assert_eq!(codex_project_count(&path).unwrap(), 0);
+        assert_eq!(
+            std::fs::read_to_string(default_path).unwrap(),
+            "# default must remain unchanged\n"
+        );
+    }
+
+    #[test]
+    fn enabling_codex_reactivates_entry_and_preserves_user_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let exe = Path::new("repolens.exe");
+        write_codex_config(&path, exe, dir.path()).unwrap();
+        let mut document = parse_document(&path);
+        let name = codex_server_name(dir.path());
+        document["mcp_servers"][&name]["enabled"] = toml_edit::value(false);
+        document["mcp_servers"][&name]["startup_timeout_sec"] = toml_edit::value(42);
+        document["mcp_servers"][&name]["tools"]["repolens_read"]["approval_mode"] =
+            toml_edit::value("never");
+        std::fs::write(&path, document.to_string()).unwrap();
+        assert_eq!(codex_project_count(&path).unwrap(), 0);
+
+        write_codex_config(&path, exe, dir.path()).unwrap();
+        let document = parse_document(&path);
+        let server = &document["mcp_servers"][&name];
+        assert_eq!(server["enabled"].as_bool(), Some(true));
+        assert_eq!(server["startup_timeout_sec"].as_integer(), Some(42));
+        assert_eq!(
+            server["tools"]["repolens_read"]["approval_mode"].as_str(),
+            Some("never")
+        );
+        assert_eq!(codex_project_count(&path).unwrap(), 1);
+    }
 
     #[test]
     fn removes_json_mcp_server_only() {

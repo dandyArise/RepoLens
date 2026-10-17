@@ -554,9 +554,13 @@ Safety rules:
 - refuses missing or stale hashes;
 - refuses path traversal;
 - refuses sensitive paths unless `allow_sensitive = true`;
+- refuses edits to RepoLens internal files under `.repolens`;
 - refuses non-UTF-8 files;
-- writes through a temp file and atomic rename;
+- serializes RepoLens edits per repository with an OS lock, then checks the current hash;
+- writes through a unique temp file and atomic replacement without overwriting existing temp siblings;
 - reindexes immediately after write.
+
+Appending a line after an unterminated last line adds a line separator, preserving CRLF when present. Other editors do not participate in the RepoLens edit lock.
 
 ### `mcp`
 
@@ -626,7 +630,7 @@ repolens enable . --target codex
 
 Current targets:
 
-- Codex: `~/.codex/config.toml`
+- Codex: `$CODEX_HOME/config.toml` when `CODEX_HOME` is nonempty, otherwise `~/.codex/config.toml`
 - Claude Desktop:
   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
   - macOS/Linux fallback: `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -657,6 +661,8 @@ args = ["mcp", "D:\\Github\\project-b"]
 ### `enable`, `disable`, `mcp-status`
 
 Manages RepoLens MCP registration without installing or uninstalling the binary.
+
+`enable` also reactivates a disabled Codex entry while preserving its tool permissions and other settings. `mcp-status` counts only enabled Codex registrations.
 
 ```powershell
 repolens enable . --target all

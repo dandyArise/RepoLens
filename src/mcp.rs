@@ -11,6 +11,7 @@ use toml_edit::{DocumentMut, Item};
 
 use crate::cli::EditOpArg;
 use crate::index::ProjectIndex;
+use crate::init::codex_config_path;
 use crate::pathing::canonical_utf8;
 use crate::{deps, edit, read, search, snapshot, symbols, watcher};
 
@@ -289,10 +290,6 @@ fn env_allowed_roots() -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
-fn codex_config_path() -> PathBuf {
-    home_dir().join(".codex").join("config.toml")
-}
-
 fn codex_config_roots(path: &Path) -> Option<Vec<PathBuf>> {
     let raw = match fs::read_to_string(path) {
         Ok(raw) => raw,
@@ -329,13 +326,6 @@ fn codex_entry_root(item: &Item) -> Option<PathBuf> {
         return None;
     }
     Some(PathBuf::from(args.get(1)?.as_str()?))
-}
-
-fn home_dir() -> PathBuf {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 fn reject_unsafe_workspace_root(root: &Path) -> Result<()> {
