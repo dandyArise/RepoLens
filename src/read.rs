@@ -112,7 +112,7 @@ pub fn read_text_with_level(
     };
     let content = String::from_utf8_lossy(bytes);
     let (content, parser, fallback) = match level {
-        ReadLevel::Normal => (content.to_string(), None, false),
+        ReadLevel::Normal => (source_lines(&content), None, false),
         ReadLevel::Compact | ReadLevel::Aggressive => {
             compact_content(&root, &rel_path, &actual_hash, &content, level)
         }
@@ -157,7 +157,7 @@ fn compact_content(
     actual_hash: &str,
     content: &str,
     level: ReadLevel,
-) -> (String, Option<String>, bool) {
+) -> (Vec<ReadLine>, Option<String>, bool) {
     let Some(parser) = parser_name(rel_path) else {
         return (line_based(content, level), None, true);
     };
@@ -174,7 +174,7 @@ fn compact_content(
     symbols.sort_by_key(|symbol| (symbol.line, symbol.end_line));
 
     match level {
-        ReadLevel::Normal => (content.to_string(), None, false),
+        ReadLevel::Normal => (source_lines(content), None, false),
         ReadLevel::Compact => (compact_with_symbols(content, &symbols), Some(parser), false),
         ReadLevel::Aggressive => (
             aggressive_with_symbols(content, &symbols),
@@ -199,8 +199,19 @@ fn load_current_index(
     ProjectIndex::build(root.as_std_path())
 }
 
-fn compact_with_symbols(content: &str, symbols: &[Symbol]) -> String {
-    let mut out = String::new();
+// Generated annotations have no source coordinate and must never shift source lines.
+type ReadLine = (Option<usize>, String);
+
+fn source_lines(content: &str) -> Vec<ReadLine> {
+    content
+        .lines()
+        .enumerate()
+        .map(|(idx, line)| (Some(idx + 1), line.to_string()))
+        .collect()
+}
+
+fn compact_with_symbols(content: &str, symbols: &[Symbol]) -> Vec<ReadLine> {
+    let mut out = Vec::new();
     let mut skip_until = 0;
     let mut omissions = symbols
         .iter()
@@ -218,23 +229,24 @@ fn compact_with_symbols(content: &str, symbols: &[Symbol]) -> String {
             continue;
         }
         if let Some((_, end)) = omissions.iter().find(|(start, _)| *start == line_no) {
-            out.push_str(line);
-            out.push('\n');
+            out.push((Some(line_no), line.to_string()));
             let omitted = end.saturating_sub(line_no);
-            out.push_str(&format!(
-                "{}// ... body omitted ({omitted} lines)\n",
-                leading_indent(line)
+            out.push((
+                None,
+                format!(
+                    "{}// ... body omitted ({omitted} lines)",
+                    leading_indent(line)
+                ),
             ));
             skip_until = *end;
             continue;
         }
-        out.push_str(line);
-        out.push('\n');
+        out.push((Some(line_no), line.to_string()));
     }
     out
 }
 
-fn aggressive_with_symbols(content: &str, symbols: &[Symbol]) -> String {
+fn aggressive_with_symbols(content: &str, symbols: &[Symbol]) -> Vec<ReadLine> {
     let lines = content.lines().collect::<Vec<_>>();
     let mut selected = Vec::new();
     for (idx, line) in lines.iter().enumerate() {
@@ -263,52 +275,57 @@ fn aggressive_with_symbols(content: &str, symbols: &[Symbol]) -> String {
     selected.sort_unstable();
     selected.dedup();
 
-    let mut out = String::new();
+    let mut out = Vec::new();
     for line_no in selected.into_iter().take(AGGRESSIVE_MAX_OUTPUT_LINES) {
         if let Some(line) = lines.get(line_no.saturating_sub(1)) {
-            out.push_str(trim_body(line));
-            out.push('\n');
+            out.push((Some(line_no), trim_body(line).to_string()));
         }
     }
-    if out.lines().count() >= AGGRESSIVE_MAX_OUTPUT_LINES {
-        out.push_str("// ... output truncated (aggressive limit: 120 lines)\n");
+    if out.len() >= AGGRESSIVE_MAX_OUTPUT_LINES {
+        out.push((
+            None,
+            "// ... output truncated (aggressive limit: 120 lines)".to_string(),
+        ));
     }
     out
 }
 
-fn line_based(content: &str, level: ReadLevel) -> String {
-    let mut out = String::new();
+fn line_based(content: &str, level: ReadLevel) -> Vec<ReadLine> {
+    let mut out = Vec::new();
     match level {
-        ReadLevel::Normal => content.to_string(),
+        ReadLevel::Normal => source_lines(content),
         ReadLevel::Compact => {
-            out.push_str(
-                "// RepoLens: language not recognized; using line-based compact fallback.\n",
-            );
+            out.push((
+                None,
+                "// RepoLens: language not recognized; using line-based compact fallback."
+                    .to_string(),
+            ));
             let mut last_written = 0;
             for (idx, line) in content.lines().enumerate() {
                 let line_no = idx + 1;
                 if line_no <= 40 || is_structural_line(line) {
                     if last_written + 1 < line_no {
-                        out.push_str("// ... lines omitted\n");
+                        out.push((None, "// ... lines omitted".to_string()));
                     }
-                    out.push_str(line);
-                    out.push('\n');
+                    out.push((Some(line_no), line.to_string()));
                     last_written = line_no;
                 }
             }
             out
         }
         ReadLevel::Aggressive => {
-            out.push_str(
-                "// RepoLens: language not recognized; using line-based aggressive fallback.\n",
-            );
-            for line in content
+            out.push((
+                None,
+                "// RepoLens: language not recognized; using line-based aggressive fallback."
+                    .to_string(),
+            ));
+            for (idx, line) in content
                 .lines()
-                .filter(|line| is_structural_line(line))
+                .enumerate()
+                .filter(|(_, line)| is_structural_line(line))
                 .take(AGGRESSIVE_MAX_OUTPUT_LINES)
             {
-                out.push_str(trim_body(line));
-                out.push('\n');
+                out.push((Some(idx + 1), trim_body(line).to_string()));
             }
             out
         }
@@ -371,15 +388,19 @@ fn leading_indent(line: &str) -> &str {
     &line[..len]
 }
 
-fn format_lines(content: &str, range: Option<&str>) -> Result<String> {
+fn format_lines(content: &[ReadLine], range: Option<&str>) -> Result<String> {
     let (start, end) = match range {
         Some(raw) => parse_line_range(raw)?,
         None => (1, usize::MAX),
     };
 
     let mut out = String::new();
-    for (idx, line) in content.lines().enumerate() {
-        let line_no = idx + 1;
+    for (line_no, line) in content {
+        let Some(line_no) = *line_no else {
+            out.push_str(line);
+            out.push('\n');
+            continue;
+        };
         if line_no >= start && line_no <= end {
             out.push_str(&format!("{line_no}: {line}\n"));
         }
@@ -511,5 +532,76 @@ mod tests {
         assert!(out.content.contains("pub struct App"));
         assert!(out.content.contains("fn run() -> Result<()>"));
         assert!(!out.content.contains("println!"));
+    }
+
+    #[test]
+    fn reduced_reads_preserve_source_coordinates() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = (0..25)
+            .map(|idx| format!("    let value_{idx} = {idx};"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let source = format!("fn large() {{\n{body}\n}}\nfn sentinel() {{}}\n");
+        for filename in ["main.rs", "main.unknown"] {
+            std::fs::write(dir.path().join(filename), &source).unwrap();
+            for level in [ReadLevel::Compact, ReadLevel::Aggressive] {
+                let out = read_text_with_level(
+                    dir.path(),
+                    Utf8Path::new(filename),
+                    None,
+                    level,
+                    None,
+                    None,
+                )
+                .unwrap();
+                assert!(
+                    out.content.contains("28: fn sentinel()"),
+                    "{filename} {level:?}: {}",
+                    out.content
+                );
+                assert_eq!(out.fallback, filename.ends_with("unknown"));
+                assert_eq!(
+                    out.parser.as_deref(),
+                    if out.fallback {
+                        None
+                    } else {
+                        Some("tree-sitter-rust")
+                    }
+                );
+                let ranged = read_text_with_level(
+                    dir.path(),
+                    Utf8Path::new(filename),
+                    Some("28"),
+                    level,
+                    None,
+                    None,
+                )
+                .unwrap();
+                assert!(ranged.content.contains("28: fn sentinel()"));
+                assert!(!ranged.content.contains("1: fn large"));
+            }
+        }
+    }
+
+    #[test]
+    fn fallback_reads_preserve_coordinates_after_omissions() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = format!("{}fn sentinel() {{}}\n", "ordinary text\n".repeat(59));
+        std::fs::write(dir.path().join("main.unknown"), source).unwrap();
+        for level in [ReadLevel::Compact, ReadLevel::Aggressive] {
+            let out = read_text_with_level(
+                dir.path(),
+                Utf8Path::new("main.unknown"),
+                Some("60-60"),
+                level,
+                None,
+                None,
+            )
+            .unwrap();
+            assert!(out.content.contains("60: fn sentinel()"));
+            assert!(!out.content.contains("ordinary text"));
+            assert!(out.fallback);
+            assert!(out.parser.is_none());
+        }
     }
 }

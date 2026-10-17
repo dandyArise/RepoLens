@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::index::{FileId, ProjectIndex};
 use crate::pathing::safe_join;
+use crate::{config::Config, security};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchHit {
@@ -22,6 +23,7 @@ pub fn search(index: &ProjectIndex, query: &str, limit: usize) -> Result<()> {
 }
 
 pub fn search_hits(index: &ProjectIndex, query: &str, limit: usize) -> Result<Vec<SearchHit>> {
+    let config = Config::load(index.root.as_std_path())?;
     let candidates = candidate_files(index, query);
     let needle = query.to_lowercase();
     let mut hits = Vec::new();
@@ -34,6 +36,9 @@ pub fn search_hits(index: &ProjectIndex, query: &str, limit: usize) -> Result<Ve
             continue;
         };
         let full_path = safe_join(&index.root, &file.path)?;
+        if !config.allow_sensitive && security::is_sensitive_path(full_path.as_std_path()) {
+            continue;
+        }
         let Ok(content) = fs::read_to_string(&full_path) else {
             continue;
         };
@@ -156,6 +161,29 @@ mod tests {
         let trigrams = extract_trigrams("abcd");
         assert!(trigrams.contains("abc"));
         assert!(trigrams.contains("bcd"));
+    }
+
+    #[test]
+    fn sensitive_search_rechecks_policy_for_stale_indexes() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = temp.path().join(".repolensrc.toml");
+        std::fs::write(&config, "allow_sensitive = true\ninclude_hidden = true\n").unwrap();
+        std::fs::write(temp.path().join(".env"), "SYNTHETIC_MARKER=example\n").unwrap();
+        let index = ProjectIndex::build(temp.path()).unwrap();
+        assert_eq!(
+            super::search_hits(&index, "SYNTHETIC_MARKER", 10)
+                .unwrap()
+                .len(),
+            1
+        );
+        std::fs::write(&config, "allow_sensitive = false\ninclude_hidden = true\n").unwrap();
+        assert!(
+            super::search_hits(&index, "SYNTHETIC_MARKER", 10)
+                .unwrap()
+                .is_empty()
+        );
+        std::fs::write(&config, "not valid toml [").unwrap();
+        assert!(super::search_hits(&index, "SYNTHETIC_MARKER", 10).is_err());
     }
 
     #[test]

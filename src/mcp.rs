@@ -449,7 +449,7 @@ fn tools() -> Vec<Value> {
         tool(
             "repolens_bundle",
             "Run multiple read-only RepoLens tools in one call.",
-            schema(json!({"ops": {"type": "array", "items": {"type": "object", "required": ["tool"], "properties": {"tool": {"type": "string"}, "arguments": {"type": "object"}}}}})).required(["ops"]),
+            schema(json!({"ops": {"type": "array", "maxItems": 10, "items": {"type": "object", "required": ["tool"], "properties": {"tool": {"type": "string"}, "arguments": {"type": "object"}}}}})).required(["ops"]),
         ),
         tool(
             "repolens_outline",
@@ -715,8 +715,11 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
                 .get("ops")
                 .and_then(Value::as_array)
                 .ok_or_else(|| anyhow!("missing 'ops'"))?;
+            if ops.len() > 10 {
+                return Err(anyhow!("bundle accepts at most 10 operations"));
+            }
             let mut results = Vec::new();
-            for op in ops.iter().take(10) {
+            for op in ops {
                 let tool = get_str(op, "tool")?;
                 if tool == "repolens_bundle" {
                     return Err(anyhow!("nested bundle is not allowed"));
@@ -863,6 +866,80 @@ mod tests {
             .to_string();
         assert!(text.contains("repolens_status"));
         assert!(text.contains("repolens_search"));
+    }
+
+    #[test]
+    fn bundle_rejects_more_than_ten_operations_before_execution() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = ServerState::with_allowed_roots(temp.path(), []).unwrap();
+        let mut ops = vec![json!({"tool": "repolens_status"}); 10];
+        ops.push(json!({"tool": "repolens_status"}));
+        // If any operation executes, the invalid query fails before the size error.
+        ops[0] = json!({"tool": "repolens_search", "arguments": {}});
+        let err =
+            super::call_tool_raw(&mut state, "repolens_bundle", json!({"ops": ops})).unwrap_err();
+        assert!(err.to_string().contains("at most 10"), "{err}");
+    }
+
+    #[test]
+    fn bundle_accepts_ten_operations_and_advertises_limit() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = ServerState::with_allowed_roots(temp.path(), []).unwrap();
+        let ops = vec![json!({"tool": "repolens_status"}); 10];
+        let result =
+            super::call_tool_raw(&mut state, "repolens_bundle", json!({"ops": ops})).unwrap();
+        assert_eq!(result.as_array().unwrap().len(), 10);
+        let tools = tools();
+        let bundle = tools
+            .iter()
+            .find(|tool| tool["name"] == "repolens_bundle")
+            .unwrap();
+        assert_eq!(bundle["inputSchema"]["properties"]["ops"]["maxItems"], 10);
+    }
+
+    #[test]
+    fn reloads_cached_index_when_sensitive_access_is_revoked() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = temp.path().join(".repolensrc.toml");
+        fs::write(&config, "allow_sensitive = true\ninclude_hidden = true\n").unwrap();
+        fs::write(temp.path().join(".env"), "TOKEN=revoked_secret_marker\n").unwrap();
+        let index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        crate::snapshot::save(&index).unwrap();
+        let mut state = ServerState::with_allowed_roots(temp.path(), []).unwrap();
+        let root = state.active_root.clone();
+
+        let tree = super::call_tool_raw(&mut state, "repolens_tree", json!({})).unwrap();
+        assert!(
+            tree.as_array()
+                .unwrap()
+                .iter()
+                .any(|file| file["path"] == ".env")
+        );
+        let hits = super::call_tool_raw(
+            &mut state,
+            "repolens_search",
+            json!({"query": "revoked_secret_marker"}),
+        )
+        .unwrap();
+        assert!(!hits.as_array().unwrap().is_empty());
+
+        fs::write(&config, "allow_sensitive = false\ninclude_hidden = true\n").unwrap();
+
+        let tree = super::call_tool_raw(&mut state, "repolens_tree", json!({})).unwrap();
+        assert!(
+            tree.as_array()
+                .unwrap()
+                .iter()
+                .all(|file| file["path"] != ".env")
+        );
+        let hits = super::call_tool_raw(
+            &mut state,
+            "repolens_search",
+            json!({"query": "revoked_secret_marker"}),
+        )
+        .unwrap();
+        assert!(hits.as_array().unwrap().is_empty());
+        assert_eq!(state.active_root, root);
     }
 
     #[test]

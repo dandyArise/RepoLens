@@ -423,6 +423,8 @@ Read levels:
 - `compact`: keeps structure and short bodies, omits long function bodies.
 - `aggressive`: keeps imports and likely signatures for quick code orientation.
 
+Compact and aggressive reads preserve original source line numbers. The `--lines` range uses source coordinates; generated omission notices have no line number.
+
 `read` records local usage estimates in `.repolens/usage.jsonl` when it can write there. Logging never blocks the read command.
 
 ### `smart`
@@ -716,7 +718,7 @@ Bundle example:
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"repolens_bundle","arguments":{"ops":[{"tool":"repolens_status","arguments":{}},{"tool":"repolens_search","arguments":{"query":"ProjectIndex","limit":3}}]}}}
 ```
 
-If `workspaceRoot` is passed to `repolens_bundle`, nested ops inherit it unless an op supplies its own `workspaceRoot`.
+If `workspaceRoot` is passed to `repolens_bundle`, nested ops inherit it unless an op supplies its own `workspaceRoot`. A bundle accepts at most 10 operations; larger bundles are rejected before any operation runs.
 
 ## Configuration ⚙️
 
@@ -771,6 +773,8 @@ RepoLens blocks sensitive names by default:
 - `secrets*`
 
 Set `allow_sensitive = true` only for controlled local testing.
+
+Revoking `allow_sensitive` also applies to existing snapshots and running MCP/HTTP servers. Search checks the current policy before reading sensitive files.
 
 ## Development 🧪
 

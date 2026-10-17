@@ -9,6 +9,7 @@ use serde::Serialize;
 
 use crate::index::ProjectIndex;
 use crate::pathing::canonical_utf8;
+use crate::{config::Config, security};
 
 #[derive(Debug, Serialize)]
 pub struct SnapshotInfo {
@@ -26,6 +27,7 @@ pub struct SnapshotInfo {
 
 pub fn load_or_build(root: &Path) -> Result<ProjectIndex> {
     let root = canonical_utf8(root)?;
+    let config = Config::load(root.as_std_path())?;
     let binary_path = binary_index_path(&root);
     let index_path = index_path(&root);
     if binary_is_current(&binary_path, &index_path)
@@ -36,17 +38,32 @@ pub fn load_or_build(root: &Path) -> Result<ProjectIndex> {
         )
         && index.root == root
         && index.version == 6
+        && matches_sensitive_policy(&index, &config)
     {
         return Ok(index);
     }
 
     match fs::read_to_string(&index_path) {
         Ok(raw) => match serde_json::from_str::<ProjectIndex>(&raw) {
-            Ok(index) if index.root == root && index.version == 6 => Ok(index),
+            Ok(index)
+                if index.root == root
+                    && index.version == 6
+                    && matches_sensitive_policy(&index, &config) =>
+            {
+                Ok(index)
+            }
             _ => ProjectIndex::build(root.as_std_path()),
         },
         Err(_) => ProjectIndex::build(root.as_std_path()),
     }
+}
+
+fn matches_sensitive_policy(index: &ProjectIndex, config: &Config) -> bool {
+    config.allow_sensitive
+        || !index
+            .files
+            .iter()
+            .any(|file| security::is_sensitive_path(index.root.join(&file.path).as_std_path()))
 }
 
 fn mmap_file(path: &Utf8Path) -> Result<memmap2::Mmap> {
@@ -89,13 +106,17 @@ pub fn binary_index_path(root: &Utf8Path) -> Utf8PathBuf {
 }
 
 pub fn stamp(root: &Utf8Path) -> Vec<Option<(std::time::SystemTime, u64)>> {
-    [index_path(root), binary_index_path(root)]
-        .iter()
-        .map(|path| {
-            let metadata = fs::metadata(path).ok()?;
-            Some((metadata.modified().ok()?, metadata.len()))
-        })
-        .collect()
+    [
+        index_path(root),
+        binary_index_path(root),
+        root.join(".repolensrc.toml"),
+    ]
+    .iter()
+    .map(|path| {
+        let metadata = fs::metadata(path).ok()?;
+        Some((metadata.modified().ok()?, metadata.len()))
+    })
+    .collect()
 }
 
 pub fn info(index: &ProjectIndex) -> SnapshotInfo {
@@ -152,6 +173,26 @@ mod tests {
         assert_eq!(loaded.files[0].path.as_str(), "main.rs");
         assert!(binary_index_path(&loaded.root).exists());
         assert!(info(&loaded).binary_bytes > 0);
+    }
+
+    #[test]
+    fn revoked_sensitive_policy_applies_to_binary_and_json_snapshots() {
+        for binary in [true, false] {
+            let temp = tempfile::tempdir().unwrap();
+            let config = temp.path().join(".repolensrc.toml");
+            fs::write(&config, "allow_sensitive = true\ninclude_hidden = true\n").unwrap();
+            fs::write(temp.path().join(".env"), "SYNTHETIC_MARKER=example\n").unwrap();
+            let index = ProjectIndex::build(temp.path()).unwrap();
+            assert!(index.files.iter().any(|file| file.path == ".env"));
+            save(&index).unwrap();
+            if !binary {
+                fs::remove_file(binary_index_path(&index.root)).unwrap();
+            }
+            fs::write(&config, "allow_sensitive = false\ninclude_hidden = true\n").unwrap();
+            let loaded = load_or_build(temp.path()).unwrap();
+            assert!(!loaded.files.iter().any(|file| file.path == ".env"));
+            assert!(crate::search::word_paths(&loaded, "SYNTHETIC_MARKER", 10).is_empty());
+        }
     }
 
     #[test]

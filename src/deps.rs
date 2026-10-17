@@ -473,15 +473,16 @@ fn resolve_ts_js_specifier(
 fn ts_js_candidates(path: &Utf8Path) -> Vec<Utf8PathBuf> {
     const EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "mts", "cts", "mjs", "cjs"];
 
-    if path.extension().is_some() {
+    if path
+        .extension()
+        .is_some_and(|ext| EXTENSIONS.contains(&ext))
+    {
         return vec![path.to_path_buf()];
     }
 
     let mut candidates = vec![path.to_path_buf()];
     for ext in EXTENSIONS {
-        let mut candidate = path.to_path_buf();
-        candidate.set_extension(ext);
-        candidates.push(candidate);
+        candidates.push(Utf8PathBuf::from(format!("{path}.{ext}")));
     }
     for ext in EXTENSIONS {
         candidates.push(path.join(format!("index.{ext}")));
@@ -719,6 +720,34 @@ mod tests {
             Some(Utf8PathBuf::from("src/lib/math.ts"))
         );
         assert_eq!(deps[0].imports[2].resolved_path, None);
+    }
+
+    #[test]
+    fn resolves_dotted_module_names_and_reverse_dependencies() {
+        let files = vec![
+            file(0, "src/main.js"),
+            file(1, "src/foo.bar.js"),
+            file(2, "src/widgets.v2/index.ts"),
+            file(3, "src/explicit.js"),
+            file(4, "src/explicit.js.ts"),
+        ];
+        let mut deps = vec![extract_ts_like_deps(
+            0,
+            &Utf8PathBuf::from("src/main.js"),
+            "const foo = require('./foo.bar');\nimport widget from './widgets.v2';\nimport explicit from './explicit.js';\n",
+        ).unwrap()];
+
+        resolve_relative_ts_js_imports(&mut deps, &files);
+
+        for (import, target) in deps[0].imports.iter().zip(&files[1..4]) {
+            assert_eq!(import.resolved_path.as_ref(), Some(&target.path));
+            assert_eq!(import.resolved_file_id, Some(target.id));
+        }
+        let (forward, reverse) = build_graph(&deps);
+        assert_eq!(forward.get(&0), Some(&vec![1, 2, 3]));
+        for target in 1..=3 {
+            assert_eq!(reverse.get(&target), Some(&vec![0]));
+        }
     }
 
     #[test]

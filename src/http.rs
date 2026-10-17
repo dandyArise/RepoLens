@@ -28,13 +28,14 @@ struct CachedIndex {
     stamp: SnapshotStamp,
 }
 
-type SnapshotStamp = [Option<(SystemTime, u64)>; 2];
+type SnapshotStamp = [Option<(SystemTime, u64)>; 3];
 
 fn snapshot_stamp(index: &ProjectIndex) -> Result<SnapshotStamp> {
-    let mut stamp = [None, None];
+    let mut stamp = [None, None, None];
     for (slot, path) in stamp.iter_mut().zip([
         snapshot::index_path(&index.root),
         snapshot::binary_index_path(&index.root),
+        index.root.join(".repolensrc.toml"),
     ]) {
         match std::fs::metadata(path) {
             Ok(metadata) => *slot = Some((metadata.modified()?, metadata.len())),
@@ -424,6 +425,28 @@ mod tests {
         assert_eq!(after.files.len(), 2);
         assert!(!search::word_paths(&after, "external_addition", 20).is_empty());
         assert!(Arc::ptr_eq(&after, &state.current_index().unwrap()));
+    }
+
+    #[test]
+    fn cached_index_reloads_when_sensitive_access_is_revoked() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = temp.path().join(".repolensrc.toml");
+        fs::write(&config, "allow_sensitive = true\ninclude_hidden = true\n").unwrap();
+        fs::write(temp.path().join(".env"), "SYNTHETIC_MARKER=example\n").unwrap();
+        snapshot::save(&ProjectIndex::build(temp.path()).unwrap()).unwrap();
+        let state = AppState::new(temp.path()).unwrap();
+        assert!(
+            state
+                .current_index()
+                .unwrap()
+                .files
+                .iter()
+                .any(|file| file.path == ".env")
+        );
+        fs::write(&config, "allow_sensitive = false\ninclude_hidden = true\n").unwrap();
+        let index = state.current_index().unwrap();
+        assert!(!index.files.iter().any(|file| file.path == ".env"));
+        assert!(search::word_paths(&index, "SYNTHETIC_MARKER", 10).is_empty());
     }
 
     #[tokio::test]
