@@ -117,7 +117,33 @@ pub fn read_text_with_level(
             compact_content(&root, &rel_path, &actual_hash, &content, level)
         }
     };
-    let content = format_lines(&content, lines)?;
+    let content = if level == ReadLevel::Aggressive {
+        let range = lines.map(parse_line_range).transpose()?;
+        let mut selected = content
+            .into_iter()
+            .filter(|(line, _)| match (line, range) {
+                (Some(line), Some((start, end))) => *line >= start && *line <= end,
+                _ => true,
+            })
+            .collect::<Vec<_>>();
+        let count = selected.iter().filter(|(line, _)| line.is_some()).count();
+        let mut kept = 0;
+        selected.retain(|(line, _)| {
+            if line.is_some() {
+                kept += 1;
+            }
+            kept <= AGGRESSIVE_MAX_OUTPUT_LINES
+        });
+        if count > AGGRESSIVE_MAX_OUTPUT_LINES {
+            selected.push((
+                None,
+                "// ... output truncated (aggressive limit: 120 lines)".to_owned(),
+            ));
+        }
+        format_lines(&selected, None)?
+    } else {
+        format_lines(&content, lines)?
+    };
     Ok(ReadOutput {
         root,
         rel_path,
@@ -276,16 +302,10 @@ fn aggressive_with_symbols(content: &str, symbols: &[Symbol]) -> Vec<ReadLine> {
     selected.dedup();
 
     let mut out = Vec::new();
-    for line_no in selected.into_iter().take(AGGRESSIVE_MAX_OUTPUT_LINES) {
+    for line_no in selected {
         if let Some(line) = lines.get(line_no.saturating_sub(1)) {
             out.push((Some(line_no), trim_body(line).to_string()));
         }
-    }
-    if out.len() >= AGGRESSIVE_MAX_OUTPUT_LINES {
-        out.push((
-            None,
-            "// ... output truncated (aggressive limit: 120 lines)".to_string(),
-        ));
     }
     out
 }
@@ -323,7 +343,6 @@ fn line_based(content: &str, level: ReadLevel) -> Vec<ReadLine> {
                 .lines()
                 .enumerate()
                 .filter(|(_, line)| is_structural_line(line))
-                .take(AGGRESSIVE_MAX_OUTPUT_LINES)
             {
                 out.push((Some(idx + 1), trim_body(line).to_string()));
             }
@@ -429,6 +448,37 @@ fn parse_line_range(raw: &str) -> Result<(usize, usize)> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn aggressive_limits_apply_after_source_range_for_parser_and_fallback() {
+        let temp = tempfile::tempdir().unwrap();
+        let text = (1..=150)
+            .map(|i| format!("fn f{i}() {{}}\n"))
+            .collect::<String>();
+        for name in ["many.rs", "many.unknown"] {
+            std::fs::write(temp.path().join(name), &text).unwrap();
+            let out = super::read_text_with_level(
+                temp.path(),
+                camino::Utf8Path::new(name),
+                Some("130-135"),
+                super::ReadLevel::Aggressive,
+                None,
+                None,
+            )
+            .unwrap();
+            assert!(out.content.contains("130: fn f130()"), "{}", out.content);
+            assert!(out.content.contains("135: fn f135()"));
+            let full = super::read_text_with_level(
+                temp.path(),
+                camino::Utf8Path::new(name),
+                None,
+                super::ReadLevel::Aggressive,
+                None,
+                None,
+            )
+            .unwrap();
+            assert!(!full.content.contains("121: fn f121()"));
+        }
+    }
     use camino::{Utf8Path, Utf8PathBuf};
 
     use super::{ReadLevel, parse_line_range, read_text, read_text_with_level};

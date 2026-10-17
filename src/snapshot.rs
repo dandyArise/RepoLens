@@ -59,11 +59,12 @@ pub fn load_or_build(root: &Path) -> Result<ProjectIndex> {
 }
 
 fn matches_sensitive_policy(index: &ProjectIndex, config: &Config) -> bool {
-    config.allow_sensitive
-        || !index
-            .files
-            .iter()
-            .any(|file| security::is_sensitive_path(index.root.join(&file.path).as_std_path()))
+    index.indexed_config == *config
+        && (config.allow_sensitive
+            || !index
+                .files
+                .iter()
+                .any(|file| security::is_sensitive_path(index.root.join(&file.path).as_std_path())))
 }
 
 fn mmap_file(path: &Utf8Path) -> Result<memmap2::Mmap> {
@@ -154,6 +155,30 @@ pub fn print_info(index: &ProjectIndex) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn config_filter_changes_rebuild_binary_and_json_snapshots() {
+        for binary in [true, false] {
+            let temp = tempfile::tempdir().unwrap();
+            let config = temp.path().join(".repolensrc.toml");
+            fs::write(&config, "include_hidden=true\n").unwrap();
+            fs::write(temp.path().join(".hidden.rs"), "fn hidden() {}\n").unwrap();
+            let index = ProjectIndex::build(temp.path()).unwrap();
+            save(&index).unwrap();
+            if !binary {
+                fs::remove_file(binary_index_path(&index.root)).unwrap();
+            }
+            fs::write(&config, "include_hidden=false\n").unwrap();
+            assert!(
+                !load_or_build(temp.path())
+                    .unwrap()
+                    .files
+                    .iter()
+                    .any(|f| f.path == ".hidden.rs")
+            );
+            fs::write(&config, "include_hidden=true\nmax_file_size='1b'\n").unwrap();
+            assert!(load_or_build(temp.path()).unwrap().files.is_empty());
+        }
+    }
     use std::fs;
 
     use crate::index::ProjectIndex;

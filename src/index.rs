@@ -18,11 +18,12 @@ use crate::symbols::{self, Symbol};
 pub type FileId = u32;
 pub type SymbolId = u32;
 // Increment when persisted indexing semantics change, even if the layout does not.
-pub const INDEX_VERSION: u32 = 7;
+pub const INDEX_VERSION: u32 = 8;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectIndex {
     pub version: u32,
+    pub indexed_config: Config,
     pub root: Utf8PathBuf,
     pub files: Vec<FileEntry>,
     pub words: BTreeMap<String, Vec<FileId>>,
@@ -95,6 +96,7 @@ impl ProjectIndex {
         let symbols_by_name = index_symbols_by_name(&symbol_list);
         Ok(Self {
             version: INDEX_VERSION,
+            indexed_config: config,
             root,
             files,
             words: flatten(words),

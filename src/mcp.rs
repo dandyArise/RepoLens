@@ -820,6 +820,47 @@ fn parse_edit_op(raw: &str) -> Result<EditOpArg> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn live_mcp_reloads_hidden_filter_without_restarting() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = temp.path().join(".repolensrc.toml");
+        fs::write(&config, "include_hidden=true\n").unwrap();
+        fs::write(temp.path().join(".hidden.rs"), "fn hidden_marker() {}\n").unwrap();
+        let index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        crate::snapshot::save(&index).unwrap();
+        let mut state = ServerState::with_allowed_roots(temp.path(), []).unwrap();
+        assert!(
+            !super::call_tool_raw(
+                &mut state,
+                "repolens_search",
+                json!({"query":"hidden_marker"})
+            )
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .is_empty()
+        );
+        fs::write(&config, "include_hidden=false\n").unwrap();
+        let tree = super::call_tool_raw(&mut state, "repolens_tree", json!({})).unwrap();
+        assert!(
+            !tree
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|f| f["path"] == ".hidden.rs")
+        );
+        assert!(
+            super::call_tool_raw(
+                &mut state,
+                "repolens_search",
+                json!({"query":"hidden_marker"})
+            )
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .is_empty()
+        );
+    }
     use std::fs;
 
     use serde_json::json;

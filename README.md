@@ -424,6 +424,7 @@ Read levels:
 - `aggressive`: keeps imports and likely signatures for quick code orientation.
 
 Compact and aggressive reads preserve original source line numbers. The `--lines` range uses source coordinates; generated omission notices have no line number.
+The aggressive output limit is applied within the requested source range.
 
 `read` records local usage estimates in `.repolens/usage.jsonl` when it can write there. Logging never blocks the read command.
 
@@ -746,6 +747,7 @@ Defaults:
 - `include_hidden = false`
 
 By default RepoLens follows `rg`-like repository filtering: `.gitignore`, git excludes, global gitignore, and hidden files are respected. Set `include_hidden = true` only when hidden project files such as `.github` or `.vscode` must be indexed.
+Changes to these RepoLens configuration options invalidate older snapshots and refresh running MCP/HTTP indexes on the next request.
 
 An example file is included:
 

@@ -192,6 +192,7 @@ mod tests {
         trigrams.insert("abc".to_string(), vec![0, 1]);
         trigrams.insert("bcd".to_string(), vec![1]);
         let index = ProjectIndex {
+            indexed_config: crate::config::Config::default(),
             version: 2,
             root: Utf8PathBuf::from("."),
             files: vec![file(0, "a.txt"), file(1, "b.txt")],

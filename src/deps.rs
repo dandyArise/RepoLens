@@ -327,14 +327,32 @@ fn walk_rust_deps(node: Node, source: &[u8], imports: &mut Vec<ImportRef>) {
 
 fn walk_ts_like_deps(node: Node, source: &[u8], imports: &mut Vec<ImportRef>) {
     match node.kind() {
-        "import_statement" => {
-            if let Some(module) = string_child(node, source) {
+        "import_statement" | "export_statement" => {
+            if let Some(module) = node
+                .child_by_field_name("source")
+                .and_then(|node| literal_module(node, source))
+            {
                 imports.push(import(node, module, ImportKind::EsImport));
             }
         }
-        "call_expression" if call_name(node, source).as_deref() == Some("require") => {
-            if let Some(module) = string_child(node, source) {
-                imports.push(import(node, module, ImportKind::CommonJsRequire));
+        "call_expression"
+            if matches!(
+                call_name(node, source).as_deref(),
+                Some("require" | "import")
+            ) =>
+        {
+            if let Some(arguments) = node.child_by_field_name("arguments")
+                && let Some(argument) = arguments
+                    .named_children(&mut arguments.walk())
+                    .find(|node| node.kind() != "comment")
+                && let Some(module) = literal_module(argument, source)
+            {
+                let kind = if call_name(node, source).as_deref() == Some("require") {
+                    ImportKind::CommonJsRequire
+                } else {
+                    ImportKind::EsImport
+                };
+                imports.push(import(node, module, kind));
             }
         }
         _ => {}
@@ -524,17 +542,8 @@ fn clean_rust_use(text: &str) -> String {
         .to_string()
 }
 
-fn string_child(node: Node, source: &[u8]) -> Option<String> {
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == "string" {
-            return Some(clean_string(child.utf8_text(source).ok()?));
-        }
-        if let Some(found) = string_child(child, source) {
-            return Some(found);
-        }
-    }
-    None
+fn literal_module(node: Node, source: &[u8]) -> Option<String> {
+    (node.kind() == "string").then(|| clean_string(node.utf8_text(source).unwrap_or_default()))
 }
 
 fn call_name(node: Node, source: &[u8]) -> Option<String> {
@@ -572,6 +581,46 @@ fn collect_string_literals(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn reexports_and_literal_dynamic_imports_build_graph_edges() {
+        let files = vec![file(0, "main.js"), file(1, "lib.js")];
+        let mut deps = vec![
+            super::extract_ts_like_deps(
+                0,
+                &"main.js".into(),
+                "export {x} from './lib.js'; export * from './lib.js'; import('./lib.js');",
+            )
+            .unwrap(),
+        ];
+        super::resolve_relative_ts_js_imports(&mut deps, &files);
+        assert_eq!(deps[0].imports.len(), 3);
+        assert!(
+            deps[0]
+                .imports
+                .iter()
+                .all(|i| i.resolved_file_id == Some(1))
+        );
+        let (forward, reverse) = super::build_graph(&deps);
+        assert_eq!(forward.get(&0), Some(&vec![1]));
+        assert_eq!(reverse.get(&1), Some(&vec![0]));
+    }
+
+    #[test]
+    fn computed_require_never_creates_a_false_literal_edge() {
+        let deps = super::extract_ts_like_deps(
+            0,
+            &"main.js".into(),
+            "require('./base'+'.js'); require(resolve('./other')); require('./literal.js');",
+        )
+        .unwrap();
+        assert_eq!(
+            deps.imports
+                .iter()
+                .map(|i| i.module.as_str())
+                .collect::<Vec<_>>(),
+            vec!["./literal.js"]
+        );
+    }
     use camino::Utf8PathBuf;
 
     use crate::index::FileEntry;

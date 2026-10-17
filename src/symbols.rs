@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tree_sitter::{Node, Parser};
 
 use crate::index::{FileId, ProjectIndex};
@@ -212,9 +211,10 @@ pub fn extract_json_symbols(
     path: &Utf8PathBuf,
     text: &str,
 ) -> Result<Vec<Symbol>> {
-    let value: Value = serde_json::from_str(text).context("failed to parse JSON")?;
+    let _: serde_json::Value = serde_json::from_str(text).context("failed to parse JSON")?;
     let mut symbols = Vec::new();
-    collect_json_keys(file_id, path, "", &value, &mut symbols);
+    let mut cursor = 0;
+    collect_json_keys(file_id, path, "", text, &mut cursor, &mut symbols)?;
     Ok(symbols)
 }
 
@@ -223,9 +223,9 @@ pub fn extract_toml_symbols(
     path: &Utf8PathBuf,
     text: &str,
 ) -> Result<Vec<Symbol>> {
-    let value: toml::Value = toml::from_str(text).context("failed to parse TOML")?;
+    let document = toml_edit::Document::parse(text).context("failed to parse TOML")?;
     let mut symbols = Vec::new();
-    collect_toml_keys(file_id, path, "", &value, &mut symbols);
+    collect_toml_keys(file_id, path, "", document.as_table(), text, &mut symbols);
     Ok(symbols)
 }
 
@@ -879,19 +879,91 @@ fn collect_json_keys(
     file_id: FileId,
     path: &Utf8PathBuf,
     prefix: &str,
-    value: &Value,
+    text: &str,
+    cursor: &mut usize,
     symbols: &mut Vec<Symbol>,
-) {
-    if let Value::Object(map) = value {
-        for (key, value) in map {
-            let name = if prefix.is_empty() {
-                key.to_string()
-            } else {
-                format!("{prefix}.{key}")
-            };
-            symbols.push(config_symbol(file_id, path, name.clone()));
-            collect_json_keys(file_id, path, &name, value, symbols);
+) -> Result<()> {
+    skip_json_whitespace(text, cursor);
+    if text.as_bytes().get(*cursor) != Some(&b'{') {
+        skip_json_value(text, cursor);
+        return Ok(());
+    }
+    *cursor += 1;
+    let mut members = std::collections::BTreeMap::new();
+    loop {
+        skip_json_whitespace(text, cursor);
+        if text.as_bytes().get(*cursor) == Some(&b'}') {
+            *cursor += 1;
+            break;
         }
+        let start = *cursor;
+        skip_json_string(text, cursor);
+        let key: String = serde_json::from_str(&text[start..*cursor])?;
+        let name = config_key_name(prefix, &key);
+        let mut member_symbols = vec![config_symbol(file_id, path, name.clone(), text, start)];
+        skip_json_whitespace(text, cursor);
+        *cursor += 1; // The colon is guaranteed by the initial JSON validation.
+        collect_json_keys(file_id, path, &name, text, cursor, &mut member_symbols)?;
+        // Match serde_json's map ordering and last-value-wins duplicate semantics.
+        members.insert(key, member_symbols);
+        skip_json_whitespace(text, cursor);
+        if text.as_bytes().get(*cursor) == Some(&b',') {
+            *cursor += 1;
+        }
+    }
+    symbols.extend(members.into_values().flatten());
+    Ok(())
+}
+
+fn skip_json_whitespace(text: &str, cursor: &mut usize) {
+    while text
+        .as_bytes()
+        .get(*cursor)
+        .is_some_and(u8::is_ascii_whitespace)
+    {
+        *cursor += 1;
+    }
+}
+
+// These scanners only run after serde_json has validated the complete document.
+// Strings are skipped as tokens so quoted key-like text cannot become a symbol.
+fn skip_json_string(text: &str, cursor: &mut usize) {
+    *cursor += 1;
+    while let Some(byte) = text.as_bytes().get(*cursor) {
+        *cursor += 1;
+        match byte {
+            b'\\' => *cursor += 1,
+            b'"' => break,
+            _ => {}
+        }
+    }
+}
+
+fn skip_json_value(text: &str, cursor: &mut usize) {
+    skip_json_whitespace(text, cursor);
+    let mut depth = 0;
+    while let Some(byte) = text.as_bytes().get(*cursor) {
+        match byte {
+            b'"' => {
+                skip_json_string(text, cursor);
+                if depth == 0 {
+                    return;
+                }
+                continue;
+            }
+            b'[' | b'{' => depth += 1,
+            b']' | b'}' if depth == 0 => return,
+            b']' | b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    *cursor += 1;
+                    return;
+                }
+            }
+            b',' if depth == 0 => return,
+            _ => {}
+        }
+        *cursor += 1;
     }
 }
 
@@ -899,31 +971,47 @@ fn collect_toml_keys(
     file_id: FileId,
     path: &Utf8PathBuf,
     prefix: &str,
-    value: &toml::Value,
+    table: &dyn toml_edit::TableLike,
+    text: &str,
     symbols: &mut Vec<Symbol>,
 ) {
-    if let toml::Value::Table(map) = value {
-        for (key, value) in map {
-            let name = if prefix.is_empty() {
-                key.to_string()
-            } else {
-                format!("{prefix}.{key}")
-            };
-            symbols.push(config_symbol(file_id, path, name.clone()));
-            collect_toml_keys(file_id, path, &name, value, symbols);
+    for (key, value) in table.iter() {
+        let name = config_key_name(prefix, key);
+        if let Some(span) = table.key(key).and_then(toml_edit::Key::span) {
+            symbols.push(config_symbol(file_id, path, name.clone(), text, span.start));
+        }
+        if let Some(child) = value.as_table_like() {
+            collect_toml_keys(file_id, path, &name, child, text, symbols);
         }
     }
 }
 
-fn config_symbol(file_id: FileId, path: &Utf8PathBuf, name: String) -> Symbol {
+fn config_key_name(prefix: &str, key: &str) -> String {
+    if prefix.is_empty() {
+        key.to_string()
+    } else {
+        format!("{prefix}.{key}")
+    }
+}
+
+fn config_symbol(
+    file_id: FileId,
+    path: &Utf8PathBuf,
+    name: String,
+    text: &str,
+    offset: usize,
+) -> Symbol {
+    let before = &text[..offset];
+    let line = before.bytes().filter(|byte| *byte == b'\n').count() + 1;
+    let column = before.rfind('\n').map_or(offset + 1, |last| offset - last);
     Symbol {
         name,
         kind: SymbolKind::Key,
         file_id,
         path: path.clone(),
-        line: 1,
-        column: 1,
-        end_line: 1,
+        line,
+        column,
+        end_line: line,
     }
 }
 
@@ -1175,6 +1263,36 @@ function make_user() {}
         assert!(symbols.iter().any(|s| s.name == "App"));
         assert!(symbols.iter().any(|s| s.name == "Service"));
         assert!(symbols.iter().any(|s| s.name == "run"));
+    }
+
+    #[test]
+    fn config_symbols_report_source_positions() {
+        let json = "{\n  \"message\": \"\\\"name\\\": ignored\",\n  \"nested\": {\n    \"name\": 1,\n    \"escaped\\u0020key\": true\n  },\n  \"name\": 2\n}";
+        let symbols = extract_json_symbols(0, &Utf8PathBuf::from("config.json"), json).unwrap();
+        for (name, line, column) in [
+            ("nested", 3, 3),
+            ("nested.name", 4, 5),
+            ("nested.escaped key", 5, 5),
+            ("name", 7, 3),
+        ] {
+            let symbol = symbols.iter().find(|symbol| symbol.name == name).unwrap();
+            assert_eq!((symbol.line, symbol.column), (line, column), "{name}");
+            assert!(symbol.end_line >= symbol.line);
+        }
+
+        let toml = "# package.name = fake\n[package]\nname = 'real'\n[package.metadata]\n  \"display name\" = 'App'\ninline = { nested = 1 }\n";
+        let symbols = extract_toml_symbols(0, &Utf8PathBuf::from("config.toml"), toml).unwrap();
+        for (name, line, column) in [
+            ("package", 2, 2),
+            ("package.name", 3, 1),
+            ("package.metadata", 4, 10),
+            ("package.metadata.display name", 5, 3),
+            ("package.metadata.inline", 6, 1),
+            ("package.metadata.inline.nested", 6, 12),
+        ] {
+            let symbol = symbols.iter().find(|symbol| symbol.name == name).unwrap();
+            assert_eq!((symbol.line, symbol.column), (line, column), "{name}");
+        }
     }
 
     #[test]
