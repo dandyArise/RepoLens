@@ -64,7 +64,7 @@ fn parse_size(raw: &str) -> Result<u64> {
     };
 
     let number = number.parse::<u64>().context("invalid size")?;
-    Ok(number * multiplier)
+    number.checked_mul(multiplier).context("size is too large")
 }
 
 #[cfg(test)]
@@ -76,6 +76,7 @@ mod tests {
         assert_eq!(parse_size("10").unwrap(), 10);
         assert_eq!(parse_size("2kb").unwrap(), 2048);
         assert_eq!(parse_size("3mb").unwrap(), 3 * 1024 * 1024);
+        assert!(parse_size("18446744073709551615mb").is_err());
     }
 
     #[test]

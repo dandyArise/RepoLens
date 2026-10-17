@@ -74,6 +74,7 @@ struct ServerState {
     codex_config_path: Option<PathBuf>,
     indexes: HashMap<String, ProjectIndex>,
     cache_order: VecDeque<String>,
+    snapshot_stamps: HashMap<String, Vec<Option<(std::time::SystemTime, u64)>>>,
 }
 
 impl ServerState {
@@ -95,6 +96,7 @@ impl ServerState {
             codex_config_path: Some(codex_config_path()),
             indexes: HashMap::new(),
             cache_order: VecDeque::new(),
+            snapshot_stamps: HashMap::new(),
         };
         state.refresh_allowed_roots();
         Ok(state)
@@ -134,6 +136,7 @@ impl ServerState {
             codex_config_path,
             indexes,
             cache_order,
+            snapshot_stamps: HashMap::new(),
         };
         state.refresh_allowed_roots();
         Ok(state)
@@ -196,6 +199,12 @@ impl ServerState {
             )
         })?;
         let key = root_key(active_root);
+        let stamp = snapshot::stamp(active_root);
+        if self.snapshot_stamps.get(&key) != Some(&stamp) {
+            let index = snapshot::load_or_build(active_root.as_std_path())?;
+            self.indexes.insert(key.clone(), index);
+            self.snapshot_stamps.insert(key.clone(), stamp);
+        }
         self.indexes
             .get(&key)
             .ok_or_else(|| anyhow!("active workspace is not indexed: {active_root}"))
@@ -232,6 +241,7 @@ impl ServerState {
                 break;
             }
             self.indexes.remove(&candidate);
+            self.snapshot_stamps.remove(&candidate);
         }
     }
 }
@@ -711,6 +721,22 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
                 if tool == "repolens_bundle" {
                     return Err(anyhow!("nested bundle is not allowed"));
                 }
+                if !matches!(
+                    tool,
+                    "repolens_status"
+                        | "repolens_snapshot"
+                        | "repolens_tree"
+                        | "repolens_search"
+                        | "repolens_word"
+                        | "repolens_read"
+                        | "repolens_outline"
+                        | "repolens_symbol"
+                        | "repolens_deps"
+                        | "repolens_rdeps"
+                        | "repolens_changes"
+                ) {
+                    return Err(anyhow!("bundle only accepts read-only tools"));
+                }
                 let mut arguments = op.get("arguments").cloned().unwrap_or(Value::Null);
                 if let Some(root) = &workspace_root
                     && workspace_root_arg(&arguments).is_none()
@@ -837,6 +863,36 @@ mod tests {
             .to_string();
         assert!(text.contains("repolens_status"));
         assert!(text.contains("repolens_search"));
+    }
+
+    #[test]
+    fn reloads_snapshot_after_external_reindex() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("main.rs"), "fn before() {}\n").unwrap();
+        let mut state = ServerState::with_allowed_roots(temp.path(), []).unwrap();
+        state.index_for_args(&json!({})).unwrap();
+        fs::write(temp.path().join("main.rs"), "fn after() {}\n").unwrap();
+        let next = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        crate::snapshot::save(&next).unwrap();
+        let index = state.index_for_args(&json!({})).unwrap();
+        assert!(!crate::symbols::find(index, "after", 10).is_empty());
+        assert!(crate::symbols::find(index, "before", 10).is_empty());
+    }
+
+    #[test]
+    fn bundle_rejects_edits_before_writing() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("main.rs");
+        let original = "fn before() {}\n";
+        fs::write(&path, original).unwrap();
+        let mut state = ServerState::with_allowed_roots(temp.path(), []).unwrap();
+        let args = json!({"ops": [{"tool": "repolens_edit", "arguments": {
+            "path": "main.rs", "op": "replace", "start": 1,
+            "content": "fn after() {}\n", "hash": blake3::hash(original.as_bytes()).to_hex().to_string()
+        }}]});
+        let err = super::call_tool_raw(&mut state, "repolens_bundle", args).unwrap_err();
+        assert!(err.to_string().contains("read-only"));
+        assert_eq!(fs::read_to_string(path).unwrap(), original);
     }
 
     #[test]

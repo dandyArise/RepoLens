@@ -104,6 +104,13 @@ pub(crate) fn candidate_files(index: &ProjectIndex, query: &str) -> Vec<FileId> 
         return index.files.iter().map(|file| file.id).collect();
     }
 
+    if trigrams
+        .iter()
+        .any(|trigram| !index.trigrams.contains_key(trigram))
+    {
+        return Vec::new();
+    }
+
     let mut sets = trigrams
         .iter()
         .filter_map(|trigram| index.trigrams.get(trigram))
@@ -170,6 +177,7 @@ mod tests {
         };
 
         assert_eq!(super::candidate_files(&index, "abcd"), vec![1]);
+        assert!(super::candidate_files(&index, "abcde").is_empty());
     }
 
     fn file(id: u32, path: &str) -> FileEntry {

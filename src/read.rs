@@ -5,9 +5,11 @@ use anyhow::{Context, Result, bail};
 use camino::Utf8Path;
 use clap::ValueEnum;
 
+use crate::config::Config;
 use crate::index::ProjectIndex;
 use crate::pathing::{canonical_utf8, resolve_in_root};
 use crate::scanner;
+use crate::security;
 use crate::snapshot;
 use crate::symbols::{Symbol, SymbolKind};
 use crate::usage::{self, UsageInput};
@@ -88,6 +90,11 @@ pub fn read_text_with_level(
 ) -> Result<ReadOutput> {
     let root = canonical_utf8(root)?;
     let (target, rel_path) = resolve_in_root(&root, path)?;
+    if !Config::load(root.as_std_path())?.allow_sensitive
+        && security::is_sensitive_path(target.as_std_path())
+    {
+        bail!("refusing to read sensitive path");
+    }
     let bytes = fs::read(&target).with_context(|| format!("failed to read {target}"))?;
     if scanner::looks_binary(&bytes) {
         bail!("repolens cannot read binary file: {rel_path}");
@@ -407,6 +414,23 @@ mod tests {
         assert_eq!(parse_line_range("2-4").unwrap(), (2, 4));
         assert_eq!(parse_line_range("3").unwrap(), (3, 3));
         assert!(parse_line_range("4-2").is_err());
+    }
+
+    #[test]
+    fn sensitive_reads_require_explicit_opt_in() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".env"), "TOKEN=fake\n").unwrap();
+        assert!(read_text(dir.path(), Utf8Path::new(".env"), None, None, None).is_err());
+        std::fs::write(
+            dir.path().join(".repolensrc.toml"),
+            "allow_sensitive = true\n",
+        )
+        .unwrap();
+        assert!(
+            read_text(dir.path(), Utf8Path::new(".env"), None, None, None)
+                .unwrap()
+                .contains("TOKEN=fake")
+        );
     }
 
     #[test]

@@ -343,24 +343,34 @@ fn write_config_if_changed(path: &Path, existing: &str, next: String) -> Result<
     fs::write(path, next).with_context(|| format!("failed to write {}", path.display()))
 }
 
-fn write_json_mcp_config(path: &Path, exe: &Path, _root: &Path) -> Result<()> {
+fn write_json_mcp_config(path: &Path, exe: &Path, root: &Path) -> Result<()> {
     let mut config = if path.exists() {
         let raw = fs::read_to_string(path)
             .with_context(|| format!("failed to read {}", path.display()))?;
-        serde_json::from_str::<Value>(&raw).unwrap_or_else(|_| json!({}))
+        serde_json::from_str::<Value>(&raw)
+            .with_context(|| format!("failed to parse {}", path.display()))?
     } else {
         json!({})
     };
 
     if !config.is_object() {
-        config = json!({});
+        anyhow::bail!(
+            "failed to update {}: configuration is not an object",
+            path.display()
+        );
     }
     if config.get("mcpServers").is_none() {
         config["mcpServers"] = json!({});
     }
+    if !config["mcpServers"].is_object() {
+        anyhow::bail!(
+            "failed to update {}: mcpServers is not an object",
+            path.display()
+        );
+    }
     config["mcpServers"]["repolens"] = json!({
         "command": exe.to_string_lossy(),
-        "args": ["mcp"]
+        "args": ["mcp", root.to_string_lossy()]
     });
 
     if let Some(parent) = path.parent() {
@@ -379,7 +389,8 @@ fn remove_json_mcp_config(path: &Path) -> Result<()> {
     }
     let raw =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-    let mut config = serde_json::from_str::<Value>(&raw).unwrap_or_else(|_| json!({}));
+    let mut config = serde_json::from_str::<Value>(&raw)
+        .with_context(|| format!("failed to parse {}", path.display()))?;
     if let Some(servers) = config.get_mut("mcpServers").and_then(Value::as_object_mut) {
         servers.remove("repolens");
     }
@@ -595,6 +606,35 @@ mod tests {
 
         assert!(write_codex_config(&path, Path::new("repolens.exe"), dir.path()).is_err());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), invalid);
+    }
+
+    #[test]
+    fn json_registration_pins_the_initialized_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mcp.json");
+        super::write_json_mcp_config(&path, Path::new("repolens.exe"), dir.path()).unwrap();
+        let config: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            config["mcpServers"]["repolens"]["args"],
+            json!(["mcp", dir.path().to_string_lossy()])
+        );
+    }
+
+    #[test]
+    fn invalid_json_config_is_preserved() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mcp.json");
+        for invalid in ["{ invalid", "[]", r#"{"mcpServers":false}"#] {
+            std::fs::write(&path, invalid).unwrap();
+            assert!(
+                super::write_json_mcp_config(&path, Path::new("repolens.exe"), dir.path()).is_err()
+            );
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), invalid);
+        }
+        std::fs::write(&path, "{ invalid").unwrap();
+        assert!(remove_json_mcp_config(&path).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ invalid");
     }
 
     fn parse_document(path: &Path) -> DocumentMut {

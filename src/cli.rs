@@ -8,6 +8,7 @@ use crate::usage::GainFormat;
 
 #[derive(Parser)]
 #[command(name = "repolens")]
+#[command(version)]
 #[command(about = "Fast local codebase index for agents")]
 pub struct Cli {
     #[command(subcommand)]

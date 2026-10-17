@@ -103,13 +103,40 @@ fn watch_polling(root: &Utf8Path, interval_ms: u64) -> Result<()> {
 }
 
 fn reindex_event_paths(root: &Utf8Path, paths: &[std::path::PathBuf]) -> Result<ProjectIndex> {
+    if paths.iter().any(|path| {
+        matches!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some(".gitignore" | ".ignore" | ".repolensrc.toml")
+        )
+    }) {
+        return rebuild(root);
+    }
     let mut index = snapshot::load_or_build(root.as_std_path())?;
+    // Use the same eligibility rules as a full index: hidden/sensitive files,
+    // ignore files, nested generated directories, and the size limit all apply.
+    let config = Config::load(root.as_std_path())?;
+    let eligible = scanner::source_files(root.as_std_path(), &config)?
+        .into_iter()
+        .filter_map(|path| relative_utf8(root, &path))
+        .collect::<BTreeSet<_>>();
+    let excluded = index
+        .files
+        .iter()
+        .filter(|file| !eligible.contains(&file.path))
+        .map(|file| file.path.clone())
+        .collect::<Vec<_>>();
+    for path in excluded {
+        index.remove_file(&path)?;
+    }
     for path in paths.iter().filter(|path| !is_ignored_path(root, path)) {
         let Some(relative) = relative_utf8(root, path) else {
             return rebuild(root);
         };
-        if path.is_file() {
+        if eligible.contains(&relative) {
             index.upsert_file(&relative)?;
+        } else if path.is_file() {
+            // It exists but the scanner excludes it.
+            continue;
         } else if index.file_by_path(&relative).is_some() {
             index.remove_file(&relative)?;
         } else {
@@ -255,10 +282,11 @@ fn change(path: &str, kind: &str) -> ChangeRecord {
 fn is_ignored_path(root: &Utf8Path, path: &Path) -> bool {
     path.strip_prefix(root.as_std_path())
         .ok()
-        .and_then(|relative| relative.components().next())
-        .is_some_and(|component| {
-            let name = component.as_os_str().to_string_lossy();
-            SKIP_DIRS.iter().any(|skip| name.eq_ignore_ascii_case(skip))
+        .is_some_and(|relative| {
+            relative.components().any(|component| {
+                let name = component.as_os_str().to_string_lossy();
+                SKIP_DIRS.iter().any(|skip| name.eq_ignore_ascii_case(skip))
+            })
         })
 }
 
@@ -361,6 +389,63 @@ mod tests {
 
         assert!(loaded.symbols.iter().any(|symbol| symbol.name == "after"));
         assert!(!loaded.symbols.iter().any(|symbol| symbol.name == "before"));
+    }
+
+    #[test]
+    fn notify_respects_scanner_exclusions_and_removes_newly_oversized_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).unwrap();
+        std::fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
+        let index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        crate::snapshot::save(&index).unwrap();
+        std::fs::write(temp.path().join(".gitignore"), "ignored.rs\n").unwrap();
+        for name in [".env", "ignored.rs", ".hidden.rs", "large.rs"] {
+            let content = if name == "large.rs" {
+                "x".repeat(1024 * 1024 + 1)
+            } else {
+                "fn excluded() {}".to_owned()
+            };
+            std::fs::write(temp.path().join(name), content).unwrap();
+            let updated = super::reindex_event_paths(&root, &[temp.path().join(name)]).unwrap();
+            assert!(
+                updated
+                    .file_by_path(&camino::Utf8PathBuf::from(name))
+                    .is_none(),
+                "{name}"
+            );
+        }
+        std::fs::write(temp.path().join("main.rs"), "x".repeat(1024 * 1024 + 1)).unwrap();
+        let updated = super::reindex_event_paths(&root, &[temp.path().join("main.rs")]).unwrap();
+        assert!(updated.files.is_empty());
+    }
+
+    #[test]
+    fn notify_rebuilds_when_ignore_rules_change() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).unwrap();
+        std::fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
+        let index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        crate::snapshot::save(&index).unwrap();
+        let ignore = temp.path().join(".gitignore");
+        std::fs::write(&ignore, "main.rs\n").unwrap();
+        assert!(
+            super::reindex_event_paths(&root, std::slice::from_ref(&ignore))
+                .unwrap()
+                .files
+                .is_empty()
+        );
+        std::fs::write(&ignore, "").unwrap();
+        assert_eq!(
+            super::reindex_event_paths(&root, &[ignore])
+                .unwrap()
+                .files
+                .len(),
+            1
+        );
+        assert!(super::is_ignored_path(
+            &root,
+            &temp.path().join("packages/app/node_modules/file.rs")
+        ));
     }
 
     #[test]

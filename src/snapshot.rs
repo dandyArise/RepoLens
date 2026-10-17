@@ -30,14 +30,21 @@ pub fn load_or_build(root: &Path) -> Result<ProjectIndex> {
     let index_path = index_path(&root);
     if binary_is_current(&binary_path, &index_path)
         && let Ok(bytes) = mmap_file(&binary_path)
-        && let Ok((index, _)) =
-            bincode::serde::decode_from_slice(bytes.as_ref(), bincode::config::standard())
+        && let Ok((index, _)) = bincode::serde::decode_from_slice::<ProjectIndex, _>(
+            bytes.as_ref(),
+            bincode::config::standard(),
+        )
+        && index.root == root
+        && index.version == 6
     {
         return Ok(index);
     }
 
     match fs::read_to_string(&index_path) {
-        Ok(raw) => serde_json::from_str(&raw).or_else(|_| ProjectIndex::build(root.as_std_path())),
+        Ok(raw) => match serde_json::from_str::<ProjectIndex>(&raw) {
+            Ok(index) if index.root == root && index.version == 6 => Ok(index),
+            _ => ProjectIndex::build(root.as_std_path()),
+        },
         Err(_) => ProjectIndex::build(root.as_std_path()),
     }
 }
@@ -79,6 +86,16 @@ pub fn index_path(root: &Utf8Path) -> Utf8PathBuf {
 
 pub fn binary_index_path(root: &Utf8Path) -> Utf8PathBuf {
     root.join(".repolens").join("index.bin")
+}
+
+pub fn stamp(root: &Utf8Path) -> Vec<Option<(std::time::SystemTime, u64)>> {
+    [index_path(root), binary_index_path(root)]
+        .iter()
+        .map(|path| {
+            let metadata = fs::metadata(path).ok()?;
+            Some((metadata.modified().ok()?, metadata.len()))
+        })
+        .collect()
 }
 
 pub fn info(index: &ProjectIndex) -> SnapshotInfo {
@@ -135,5 +152,29 @@ mod tests {
         assert_eq!(loaded.files[0].path.as_str(), "main.rs");
         assert!(binary_index_path(&loaded.root).exists());
         assert!(info(&loaded).binary_bytes > 0);
+    }
+
+    #[test]
+    fn copied_snapshot_cannot_redirect_reads_to_another_root() {
+        let source = tempfile::tempdir().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("source.rs"), "fn source() {}\n").unwrap();
+        let index = ProjectIndex::build(source.path()).unwrap();
+        save(&index).unwrap();
+        fs::write(target.path().join("target.rs"), "fn target() {}\n").unwrap();
+        fs::create_dir(target.path().join(".repolens")).unwrap();
+        for name in ["index.json", "index.bin"] {
+            fs::copy(
+                source.path().join(".repolens").join(name),
+                target.path().join(".repolens").join(name),
+            )
+            .unwrap();
+        }
+        let loaded = load_or_build(target.path()).unwrap();
+        assert_eq!(
+            loaded.root.as_std_path(),
+            dunce::canonicalize(target.path()).unwrap()
+        );
+        assert_eq!(loaded.files[0].path.as_str(), "target.rs");
     }
 }

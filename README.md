@@ -7,7 +7,7 @@ RepoLens scans a repository, builds compact local indexes, and exposes code navi
 ## Links
 
 - 🚀 [Latest release](https://github.com/dandyArise/RepoLens/releases/latest)
-- 📦 [v0.1.11 binaries](https://github.com/dandyArise/RepoLens/releases/tag/v0.1.11)
+- 📦 [Release binaries](https://github.com/dandyArise/RepoLens/releases/latest)
 - ⚙️ [GitHub Actions builds](https://github.com/dandyArise/RepoLens/actions)
 - 🧩 [Windows installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.ps1)
 - 🧩 [Linux/macOS installer](https://github.com/dandyArise/RepoLens/blob/main/install/install.sh)
@@ -636,7 +636,7 @@ Current targets:
 repolens mcp <repo-root>
 ```
 
-For Claude Desktop and Cursor, the registration is global and starts with `repolens mcp` (without a pinned repository). Select a repository dynamically with `repolens_switch_workspace` or by passing `workspaceRoot` to a tool call. Codex keeps one entry per repository so its project roots remain explicit.
+For Claude Desktop and Cursor, the global registration starts with `repolens mcp <repo-root>` so the initialized repository is immediately available. Reinitializing selects another repository. Additional allowed roots can be selected dynamically with `repolens_switch_workspace` or by passing `workspaceRoot` to a tool call. Codex keeps one entry per repository so its project roots remain explicit.
 
 Codex uses one stable MCP entry per repository. A legacy `[mcp_servers.repolens]` entry is migrated automatically to the project-specific naming scheme the next time `init --target codex` runs. Existing project registrations, unrelated MCP servers, comments, and formatting in `config.toml` are preserved.
 
