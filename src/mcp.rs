@@ -177,9 +177,7 @@ impl ServerState {
         let Some(path) = &self.codex_config_path else {
             return;
         };
-        let Some(config_roots) = codex_config_roots(path) else {
-            return;
-        };
+        let config_roots = codex_config_roots(path).unwrap_or_default();
 
         let mut allowed_roots = self.fixed_allowed_roots.clone();
         for root in config_roots {
@@ -188,9 +186,23 @@ impl ServerState {
             }
         }
         self.allowed_roots = allowed_roots;
+        self.indexes
+            .retain(|key, _| self.allowed_roots.contains_key(key));
+        self.snapshot_stamps
+            .retain(|key, _| self.allowed_roots.contains_key(key));
+        self.cache_order
+            .retain(|key| self.allowed_roots.contains_key(key));
+        if self
+            .active_root
+            .as_ref()
+            .is_some_and(|root| !self.allowed_roots.contains_key(&root_key(root)))
+        {
+            self.active_root = None;
+        }
     }
 
     fn index_for_args(&mut self, args: &Value) -> Result<&ProjectIndex> {
+        self.refresh_allowed_roots();
         if let Some(root) = workspace_root_arg(args) {
             self.switch_root(Path::new(root))?;
         }
@@ -311,6 +323,9 @@ fn codex_config_roots(path: &Path) -> Option<Vec<PathBuf>> {
 
 fn codex_entry_root(item: &Item) -> Option<PathBuf> {
     let table = item.as_table()?;
+    if table.get("enabled").and_then(Item::as_bool) == Some(false) {
+        return None;
+    }
     let command = table.get("command")?.as_str()?;
     let executable = command
         .replace('\\', "/")
@@ -419,22 +434,22 @@ fn tools() -> Vec<Value> {
         tool(
             "repolens_tree",
             "List indexed files.",
-            schema(json!({"limit": {"type": "integer"}})),
+            schema(json!({"limit": {"type": "integer", "minimum": 0}})),
         ),
         tool(
             "repolens_search",
             "Search indexed content.",
-            schema(json!({"query": {"type": "string"}, "limit": {"type": "integer"}})).required(["query"]),
+            schema(json!({"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 0}})).required(["query"]),
         ),
         tool(
             "repolens_word",
             "Find files containing an identifier word.",
-            schema(json!({"word": {"type": "string"}, "limit": {"type": "integer"}})).required(["word"]),
+            schema(json!({"word": {"type": "string"}, "limit": {"type": "integer", "minimum": 0}})).required(["word"]),
         ),
         tool(
             "repolens_read",
             "Read a file with optional line range.",
-            schema(json!({"path": {"type": "string"}, "lines": {"type": "string"}, "max_bytes": {"type": "integer"}, "hash": {"type": "string"}})).required(["path"]),
+            schema(json!({"path": {"type": "string"}, "lines": {"type": "string"}, "max_bytes": {"type": "integer", "minimum": 0}, "hash": {"type": "string"}})).required(["path"]),
         ),
         tool(
             "repolens_bundle",
@@ -449,7 +464,7 @@ fn tools() -> Vec<Value> {
         tool(
             "repolens_symbol",
             "Find indexed symbols by name.",
-            schema(json!({"name": {"type": "string"}, "limit": {"type": "integer"}})).required(["name"]),
+            schema(json!({"name": {"type": "string"}, "limit": {"type": "integer", "minimum": 0}})).required(["name"]),
         ),
         tool(
             "repolens_deps",
@@ -464,7 +479,7 @@ fn tools() -> Vec<Value> {
         tool(
             "repolens_edit",
             "Apply a guarded line edit. Requires current file hash.",
-            schema(json!({"path": {"type": "string"}, "op": {"type": "string", "enum": ["replace", "insert", "delete"]}, "start": {"type": "integer"}, "end": {"type": "integer"}, "content": {"type": "string"}, "hash": {"type": "string"}})).required(["path", "op", "start", "hash"]),
+            schema(json!({"path": {"type": "string"}, "op": {"type": "string", "enum": ["replace", "insert", "delete"]}, "start": {"type": "integer", "minimum": 1}, "end": {"type": "integer", "minimum": 1}, "content": {"type": "string"}, "hash": {"type": "string"}})).required(["path", "op", "start", "hash"]),
         ),
         tool(
             "repolens_changes",
@@ -560,7 +575,8 @@ fn call_tool_raw(state: &mut ServerState, name: &str, args: Value) -> Result<Val
     let previous_active = state.active_root.clone();
     let result = call_tool_raw_inner(state, name, args);
     if result.is_err() {
-        state.active_root = previous_active;
+        state.active_root =
+            previous_active.filter(|root| state.allowed_roots.contains_key(&root_key(root)));
     }
     result
 }
@@ -625,7 +641,7 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
         }
         "repolens_tree" => {
             let index = state.index_for_args(&args)?;
-            let limit = get_usize(&args, "limit").unwrap_or(200);
+            let limit = get_usize(&args, "limit")?.unwrap_or(200);
             json!(index.files.iter().take(limit).map(|file| {
                 json!({"path": file.path, "lines": file.lines, "bytes": file.bytes, "hash": file.hash})
             }).collect::<Vec<_>>())
@@ -633,20 +649,20 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
         "repolens_search" => {
             let index = state.index_for_args(&args)?;
             let query = get_str(&args, "query")?;
-            let limit = get_usize(&args, "limit").unwrap_or(20);
+            let limit = get_usize(&args, "limit")?.unwrap_or(20);
             json!(search::search_hits(index, query, limit)?)
         }
         "repolens_word" => {
             let index = state.index_for_args(&args)?;
             let word = get_str(&args, "word")?;
-            let limit = get_usize(&args, "limit").unwrap_or(20);
+            let limit = get_usize(&args, "limit")?.unwrap_or(20);
             json!(search::word_paths(index, word, limit))
         }
         "repolens_read" => {
             let index = state.index_for_args(&args)?;
             let path = Utf8PathBuf::from(get_str(&args, "path")?);
             let lines = args.get("lines").and_then(Value::as_str);
-            let max_bytes = get_usize(&args, "max_bytes");
+            let max_bytes = get_usize(&args, "max_bytes")?;
             let hash = args.get("hash").and_then(Value::as_str);
             json!(read::read_text(
                 index.root.as_std_path(),
@@ -664,7 +680,7 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
         "repolens_symbol" => {
             let index = state.index_for_args(&args)?;
             let name = get_str(&args, "name")?;
-            let limit = get_usize(&args, "limit").unwrap_or(20);
+            let limit = get_usize(&args, "limit")?.unwrap_or(20);
             json!(symbols::find(index, name, limit))
         }
         "repolens_deps" => {
@@ -682,7 +698,7 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
             let path = Utf8PathBuf::from(get_str(&args, "path")?);
             let op = parse_edit_op(get_str(&args, "op")?)?;
             let start = get_required_usize(&args, "start")?;
-            let end = get_usize(&args, "end");
+            let end = get_usize(&args, "end")?;
             let content = args.get("content").and_then(Value::as_str);
             let hash = get_str(&args, "hash")?;
             json!(edit::apply(
@@ -767,15 +783,20 @@ fn get_str<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
         .ok_or_else(|| anyhow!("missing '{key}'"))
 }
 
-fn get_usize(value: &Value, key: &str) -> Option<usize> {
+fn get_usize(value: &Value, key: &str) -> Result<Option<usize>> {
     value
         .get(key)
-        .and_then(Value::as_u64)
-        .and_then(|value| usize::try_from(value).ok())
+        .map(|value| {
+            value
+                .as_u64()
+                .and_then(|value| usize::try_from(value).ok())
+                .ok_or_else(|| anyhow!("'{key}' must be a non-negative integer"))
+        })
+        .transpose()
 }
 
 fn get_required_usize(value: &Value, key: &str) -> Result<usize> {
-    get_usize(value, key).ok_or_else(|| anyhow!("missing '{key}'"))
+    get_usize(value, key)?.ok_or_else(|| anyhow!("missing '{key}'"))
 }
 
 fn parse_edit_op(raw: &str) -> Result<EditOpArg> {
@@ -794,6 +815,75 @@ mod tests {
     use serde_json::json;
 
     use super::{MAX_CACHED_ROOTS, ServerState, handle_line, is_notification, tools};
+
+    #[test]
+    fn invalid_optional_edit_bounds_never_mutate_file() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("main.rs");
+        let original = "fn first() {}\nfn second() {}\n";
+        fs::write(&path, original).unwrap();
+        let mut state = ServerState::with_allowed_roots(root.path(), []).unwrap();
+        let hash = state.index_for_args(&json!({})).unwrap().files[0]
+            .hash
+            .clone();
+        for end in [json!(-1), json!(1.5), json!("2"), json!(null)] {
+            let result = super::call_tool_raw(
+                &mut state,
+                "repolens_edit",
+                json!({
+                    "path":"main.rs", "op":"delete", "start":1, "end":end, "hash":hash
+                }),
+            );
+            assert!(result.is_err(), "invalid end {end}");
+            assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        }
+    }
+
+    #[test]
+    fn disabled_and_revoked_codex_roots_cannot_be_read_from_cache() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let config = tempfile::tempdir().unwrap();
+        let config_path = config.path().join("config.toml");
+        fs::write(second.path().join("marker.rs"), "fn secret_marker() {}\n").unwrap();
+        let registration = format!(
+            "[mcp_servers.dynamic]\ncommand='repolens'\nargs=['mcp', {}]\n",
+            serde_json::to_string(&second.path().to_string_lossy()).unwrap()
+        );
+        fs::write(&config_path, format!("{registration}enabled=false\n")).unwrap();
+        let mut state = ServerState::with_allowed_roots_and_codex_config(
+            first.path(),
+            [],
+            Some(config_path.clone()),
+        )
+        .unwrap();
+        assert!(state.switch_root(second.path()).is_err());
+        for revoked in [
+            format!("{registration}enabled=false\n"),
+            String::new(),
+            "invalid = [".to_owned(),
+        ] {
+            fs::write(&config_path, &registration).unwrap();
+            state.switch_root(second.path()).unwrap();
+            assert!(
+                super::call_tool_raw(&mut state, "repolens_read", json!({"path":"marker.rs"}))
+                    .is_ok()
+            );
+            fs::write(&config_path, revoked).unwrap();
+            assert!(
+                super::call_tool_raw(&mut state, "repolens_read", json!({"path":"marker.rs"}))
+                    .is_err()
+            );
+            assert!(state.active_root.is_none());
+            assert!(
+                !state
+                    .indexes
+                    .contains_key(&super::root_key(&canonical(second.path())))
+            );
+            assert!(state.switch_root(second.path()).is_err());
+            state.switch_root(first.path()).unwrap();
+        }
+    }
 
     fn canonical(path: &std::path::Path) -> camino::Utf8PathBuf {
         camino::Utf8PathBuf::from_path_buf(dunce::canonicalize(path).unwrap()).unwrap()

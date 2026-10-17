@@ -126,6 +126,8 @@ pub fn resolve_relative_ts_js_imports(deps: &mut [FileDeps], files: &[FileEntry]
                 continue;
             }
 
+            import.resolved_path = None;
+            import.resolved_file_id = None;
             if let Some((path, id)) =
                 resolve_ts_js_specifier(&file_deps.path, &import.module, &by_path)
             {
@@ -461,8 +463,9 @@ fn resolve_ts_js_specifier(
     by_path: &BTreeMap<Utf8PathBuf, FileId>,
 ) -> Option<(Utf8PathBuf, FileId)> {
     let base = from.parent().unwrap_or_else(|| Utf8Path::new(""));
-    let requested = normalize_relative_path(&base.join(module));
-    for candidate in ts_js_candidates(&requested) {
+    let requested = normalize_relative_path(&base.join(module))?;
+    let prefer_javascript = matches!(from.extension(), Some("js" | "jsx" | "mjs" | "cjs"));
+    for candidate in ts_js_candidates(&requested, prefer_javascript) {
         if let Some(id) = by_path.get(&candidate) {
             return Some((candidate, *id));
         }
@@ -470,39 +473,47 @@ fn resolve_ts_js_specifier(
     None
 }
 
-fn ts_js_candidates(path: &Utf8Path) -> Vec<Utf8PathBuf> {
-    const EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "mts", "cts", "mjs", "cjs"];
+fn ts_js_candidates(path: &Utf8Path, prefer_javascript: bool) -> Vec<Utf8PathBuf> {
+    const TS_FIRST: &[&str] = &["ts", "tsx", "js", "jsx", "mts", "cts", "mjs", "cjs"];
+    const JS_FIRST: &[&str] = &["js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts"];
+    let extensions = if prefer_javascript {
+        JS_FIRST
+    } else {
+        TS_FIRST
+    };
 
     if path
         .extension()
-        .is_some_and(|ext| EXTENSIONS.contains(&ext))
+        .is_some_and(|ext| extensions.contains(&ext))
     {
         return vec![path.to_path_buf()];
     }
 
     let mut candidates = vec![path.to_path_buf()];
-    for ext in EXTENSIONS {
+    for ext in extensions {
         candidates.push(Utf8PathBuf::from(format!("{path}.{ext}")));
     }
-    for ext in EXTENSIONS {
+    for ext in extensions {
         candidates.push(path.join(format!("index.{ext}")));
     }
     candidates
 }
 
-fn normalize_relative_path(path: &Utf8Path) -> Utf8PathBuf {
+fn normalize_relative_path(path: &Utf8Path) -> Option<Utf8PathBuf> {
     let mut out = Utf8PathBuf::new();
     for component in path.components() {
         match component {
             Utf8Component::CurDir => {}
             Utf8Component::ParentDir => {
-                out.pop();
+                if !out.pop() {
+                    return None;
+                }
             }
             Utf8Component::Normal(part) => out.push(part),
-            Utf8Component::RootDir | Utf8Component::Prefix(_) => return path.to_path_buf(),
+            Utf8Component::RootDir | Utf8Component::Prefix(_) => return None,
         }
     }
-    out
+    Some(out)
 }
 
 fn clean_rust_use(text: &str) -> String {
@@ -747,6 +758,83 @@ mod tests {
         assert_eq!(forward.get(&0), Some(&vec![1, 2, 3]));
         for target in 1..=3 {
             assert_eq!(reverse.get(&target), Some(&vec![0]));
+        }
+    }
+
+    #[test]
+    fn rejects_imports_escaping_repository_and_clears_stale_graph_edges() {
+        let files = vec![file(0, "main.js"), file(1, "shared.js")];
+        let mut deps = vec![
+            extract_ts_like_deps(
+                0,
+                &Utf8PathBuf::from("main.js"),
+                "require('../shared'); require('./nested/../../shared');",
+            )
+            .unwrap(),
+        ];
+        for import in &mut deps[0].imports {
+            import.resolved_path = Some(Utf8PathBuf::from("shared.js"));
+            import.resolved_file_id = Some(1);
+        }
+        resolve_relative_ts_js_imports(&mut deps, &files);
+        assert!(
+            deps[0]
+                .imports
+                .iter()
+                .all(|i| i.resolved_path.is_none() && i.resolved_file_id.is_none())
+        );
+        let (forward, reverse) = build_graph(&deps);
+        assert!(forward.is_empty());
+        assert!(reverse.is_empty());
+    }
+
+    #[test]
+    fn resolves_parent_imports_within_repository_and_removes_deleted_targets() {
+        let files = vec![file(0, "src/main.js"), file(1, "shared.js")];
+        let mut deps = vec![
+            extract_ts_like_deps(
+                0,
+                &Utf8PathBuf::from("src/main.js"),
+                "require('../shared');",
+            )
+            .unwrap(),
+        ];
+        resolve_relative_ts_js_imports(&mut deps, &files);
+        assert_eq!(deps[0].imports[0].resolved_file_id, Some(1));
+        assert_eq!(build_graph(&deps).1.get(&1), Some(&vec![0]));
+        resolve_relative_ts_js_imports(&mut deps, &files[..1]);
+        assert_eq!(deps[0].imports[0].resolved_path, None);
+        assert_eq!(deps[0].imports[0].resolved_file_id, None);
+        assert!(build_graph(&deps).1.is_empty());
+    }
+
+    #[test]
+    fn javascript_importers_prefer_javascript_and_typescript_keeps_its_priority() {
+        let files = vec![
+            file(1, "util.ts"),
+            file(2, "util.js"),
+            file(3, "dir/index.ts"),
+            file(4, "dir/index.js"),
+        ];
+        for extension in ["js", "cjs", "mjs", "jsx", "ts", "tsx", "mts", "cts"] {
+            let path = Utf8PathBuf::from(format!("main.{extension}"));
+            let mut deps = vec![extract_ts_like_deps(0, &path,
+                "require('./util'); require('./dir'); require('./util.ts'); require('./util.js');").unwrap()];
+            resolve_relative_ts_js_imports(&mut deps, &files);
+            let is_js = ["js", "cjs", "mjs", "jsx"].contains(&extension);
+            assert_eq!(
+                deps[0].imports[0].resolved_file_id,
+                Some(if is_js { 2 } else { 1 }),
+                "{extension}"
+            );
+            assert_eq!(
+                deps[0].imports[1].resolved_file_id,
+                Some(if is_js { 4 } else { 3 }),
+                "{extension}"
+            );
+            assert_eq!(deps[0].imports[2].resolved_file_id, Some(1));
+            assert_eq!(deps[0].imports[3].resolved_file_id, Some(2));
+            assert_eq!(build_graph(&deps).1.get(&2), Some(&vec![0]));
         }
     }
 
