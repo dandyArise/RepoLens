@@ -7,7 +7,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use memmap2::MmapOptions;
 use serde::Serialize;
 
-use crate::index::ProjectIndex;
+use crate::index::{INDEX_VERSION, ProjectIndex};
 use crate::pathing::canonical_utf8;
 use crate::{config::Config, security};
 
@@ -37,7 +37,7 @@ pub fn load_or_build(root: &Path) -> Result<ProjectIndex> {
             bincode::config::standard(),
         )
         && index.root == root
-        && index.version == 6
+        && index.version == INDEX_VERSION
         && matches_sensitive_policy(&index, &config)
     {
         return Ok(index);
@@ -47,7 +47,7 @@ pub fn load_or_build(root: &Path) -> Result<ProjectIndex> {
         Ok(raw) => match serde_json::from_str::<ProjectIndex>(&raw) {
             Ok(index)
                 if index.root == root
-                    && index.version == 6
+                    && index.version == INDEX_VERSION
                     && matches_sensitive_policy(&index, &config) =>
             {
                 Ok(index)
@@ -159,6 +159,47 @@ mod tests {
     use crate::index::ProjectIndex;
 
     use super::{binary_index_path, info, load_or_build, save};
+
+    #[test]
+    fn rebuilds_legacy_dependency_indexes_in_binary_and_json() {
+        for binary in [true, false] {
+            let temp = tempfile::tempdir().unwrap();
+            fs::write(temp.path().join("main.js"), "require('./util');\n").unwrap();
+            fs::write(temp.path().join("util.js"), "module.exports=1;\n").unwrap();
+            fs::write(temp.path().join("util.ts"), "export const n=2;\n").unwrap();
+            let mut legacy = ProjectIndex::build(temp.path()).unwrap();
+            legacy.version = 6;
+            let wrong_id = legacy
+                .files
+                .iter()
+                .find(|f| f.path == "util.ts")
+                .unwrap()
+                .id;
+            let import = &mut legacy
+                .deps
+                .iter_mut()
+                .find(|d| d.path == "main.js")
+                .unwrap()
+                .imports[0];
+            import.resolved_path = Some("util.ts".into());
+            import.resolved_file_id = Some(wrong_id);
+            save(&legacy).unwrap();
+            if !binary {
+                fs::remove_file(binary_index_path(&legacy.root)).unwrap();
+            }
+            let loaded = load_or_build(temp.path()).unwrap();
+            let import = &loaded
+                .deps
+                .iter()
+                .find(|d| d.path == "main.js")
+                .unwrap()
+                .imports[0];
+            assert_eq!(
+                import.resolved_path.as_deref(),
+                Some(camino::Utf8Path::new("util.js"))
+            );
+        }
+    }
 
     #[test]
     fn saves_and_loads_snapshot() {

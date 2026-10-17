@@ -17,6 +17,8 @@ use crate::symbols::{self, Symbol};
 
 pub type FileId = u32;
 pub type SymbolId = u32;
+// Increment when persisted indexing semantics change, even if the layout does not.
+pub const INDEX_VERSION: u32 = 7;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectIndex {
@@ -92,7 +94,7 @@ impl ProjectIndex {
         let (deps_forward, deps_reverse) = deps::build_graph(&deps_list);
         let symbols_by_name = index_symbols_by_name(&symbol_list);
         Ok(Self {
-            version: 6,
+            version: INDEX_VERSION,
             root,
             files,
             words: flatten(words),
@@ -118,11 +120,17 @@ impl ProjectIndex {
     }
 
     pub fn upsert_file(&mut self, path: &Utf8PathBuf) -> Result<()> {
+        let config = Config::load(self.root.as_std_path())?;
+        let full_path = self.root.join(path);
+        if !scanner::source_files(self.root.as_std_path(), &config)?
+            .contains(&full_path.as_std_path().to_path_buf())
+        {
+            return self.remove_file(path);
+        }
         let id = self
             .file_by_path(path)
             .map(|file| file.id)
             .unwrap_or_else(|| self.files.iter().map(|file| file.id).max().unwrap_or(0) + 1);
-        let full_path = self.root.join(path);
         let bytes =
             fs::read(&full_path).with_context(|| format!("failed to read {}", full_path))?;
         if scanner::looks_binary(&bytes) {

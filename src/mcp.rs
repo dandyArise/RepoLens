@@ -203,7 +203,7 @@ impl ServerState {
 
     fn index_for_args(&mut self, args: &Value) -> Result<&ProjectIndex> {
         self.refresh_allowed_roots();
-        if let Some(root) = workspace_root_arg(args) {
+        if let Some(root) = workspace_root_arg(args)? {
             self.switch_root(Path::new(root))?;
         }
         let active_root = self.active_root.as_ref().ok_or_else(|| {
@@ -359,10 +359,20 @@ fn reject_unsafe_workspace_root(root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn workspace_root_arg(args: &Value) -> Option<&str> {
-    args.get("workspaceRoot")
-        .or_else(|| args.get("root"))
-        .and_then(Value::as_str)
+fn workspace_root_arg(args: &Value) -> Result<Option<&str>> {
+    let workspace = get_optional_str(args, "workspaceRoot")?;
+    let alias = get_optional_str(args, "root")?;
+    Ok(workspace.or(alias))
+}
+
+fn get_optional_str<'a>(args: &'a Value, key: &str) -> Result<Option<&'a str>> {
+    args.get(key)
+        .map(|value| {
+            value
+                .as_str()
+                .ok_or_else(|| anyhow!("'{key}' must be a string"))
+        })
+        .transpose()
 }
 
 fn handle_line(state: &mut ServerState, line: &str) -> Response {
@@ -585,7 +595,7 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
     let value = match name {
         "repolens_switch_workspace" => {
             let root =
-                workspace_root_arg(&args).ok_or_else(|| anyhow!("missing 'workspaceRoot'"))?;
+                workspace_root_arg(&args)?.ok_or_else(|| anyhow!("missing 'workspaceRoot'"))?;
             state.switch_root(Path::new(root))?;
             json!({
                 "root": state.active_root,
@@ -661,9 +671,9 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
         "repolens_read" => {
             let index = state.index_for_args(&args)?;
             let path = Utf8PathBuf::from(get_str(&args, "path")?);
-            let lines = args.get("lines").and_then(Value::as_str);
+            let lines = get_optional_str(&args, "lines")?;
             let max_bytes = get_usize(&args, "max_bytes")?;
-            let hash = args.get("hash").and_then(Value::as_str);
+            let hash = get_optional_str(&args, "hash")?;
             json!(read::read_text(
                 index.root.as_std_path(),
                 &path,
@@ -699,7 +709,7 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
             let op = parse_edit_op(get_str(&args, "op")?)?;
             let start = get_required_usize(&args, "start")?;
             let end = get_usize(&args, "end")?;
-            let content = args.get("content").and_then(Value::as_str);
+            let content = get_optional_str(&args, "content")?;
             let hash = get_str(&args, "hash")?;
             json!(edit::apply(
                 index.root.as_std_path(),
@@ -716,7 +726,7 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
             json!(watcher::read_state(&index.root)?)
         }
         "repolens_bundle" => {
-            let workspace_root = workspace_root_arg(&args).map(str::to_owned);
+            let workspace_root = workspace_root_arg(&args)?.map(str::to_owned);
             let ops = args
                 .get("ops")
                 .and_then(Value::as_array)
@@ -748,7 +758,7 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
                 }
                 let mut arguments = op.get("arguments").cloned().unwrap_or(Value::Null);
                 if let Some(root) = &workspace_root
-                    && workspace_root_arg(&arguments).is_none()
+                    && workspace_root_arg(&arguments)?.is_none()
                 {
                     ensure_object(&mut arguments)?;
                     arguments["workspaceRoot"] = json!(root);
@@ -815,6 +825,31 @@ mod tests {
     use serde_json::json;
 
     use super::{MAX_CACHED_ROOTS, ServerState, handle_line, is_notification, tools};
+
+    #[test]
+    fn rejects_invalid_optional_strings_without_switching_or_editing() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("main.rs"), "fn main() {}\n").unwrap();
+        let mut state = ServerState::with_allowed_roots(temp.path(), []).unwrap();
+        let active = state.active_root.clone();
+        for key in ["workspaceRoot", "root", "lines", "hash"] {
+            for invalid in [json!(42), json!(null), json!([]), json!(true)] {
+                let mut args = json!({"path":"main.rs"});
+                args[key] = invalid;
+                assert!(
+                    super::call_tool_raw(&mut state, "repolens_read", args).is_err(),
+                    "{key}"
+                );
+                assert_eq!(state.active_root, active);
+            }
+        }
+        let result = super::call_tool_raw(
+            &mut state,
+            "repolens_bundle",
+            json!({"workspaceRoot":42,"ops":[{"tool":"repolens_read","arguments":{"path":"main.rs"}}]}),
+        );
+        assert!(result.is_err());
+    }
 
     #[test]
     fn invalid_optional_edit_bounds_never_mutate_file() {

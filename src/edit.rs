@@ -98,7 +98,8 @@ fn apply_to_text(
             let end = end.unwrap_or(start);
             validate_range(lines.len(), start, end)?;
             let replacement = content.ok_or_else(|| anyhow::anyhow!("content is required"))?;
-            lines.splice(start - 1..end, split_preserve_lines(replacement));
+            let replacement = edit_lines(replacement, end < lines.len(), text);
+            lines.splice(start - 1..end, replacement);
         }
         EditOpArg::Insert => {
             if start > lines.len() + 1 {
@@ -113,7 +114,8 @@ fn apply_to_text(
                 let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
                 last.push_str(newline);
             }
-            lines.splice(start - 1..start - 1, split_preserve_lines(insertion));
+            let insertion = edit_lines(insertion, start <= lines.len(), text);
+            lines.splice(start - 1..start - 1, insertion);
         }
         EditOpArg::Delete => {
             let end = end.unwrap_or(start);
@@ -130,6 +132,21 @@ fn split_preserve_lines(text: &str) -> Vec<String> {
         return Vec::new();
     }
     text.split_inclusive('\n').map(str::to_string).collect()
+}
+
+fn edit_lines(content: &str, has_following_line: bool, original: &str) -> Vec<String> {
+    let mut lines = split_preserve_lines(content);
+    if has_following_line
+        && let Some(last) = lines.last_mut()
+        && !last.ends_with('\n')
+    {
+        last.push_str(if original.contains("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        });
+    }
+    lines
 }
 
 fn validate_range(line_count: usize, start: usize, end: usize) -> Result<()> {
@@ -166,6 +183,56 @@ mod tests {
 
     use super::apply_to_text;
     use crate::cli::EditOpArg;
+
+    #[test]
+    fn unterminated_edit_content_preserves_following_line() {
+        for newline in ["\n", "\r\n"] {
+            let text = format!("a{newline}b{newline}");
+            assert_eq!(
+                apply_to_text(&text, EditOpArg::Insert, 2, None, Some("NEW")).unwrap(),
+                format!("a{newline}NEW{newline}b{newline}")
+            );
+            assert_eq!(
+                apply_to_text(&text, EditOpArg::Replace, 1, None, Some("NEW")).unwrap(),
+                format!("NEW{newline}b{newline}")
+            );
+            assert_eq!(
+                apply_to_text(&text, EditOpArg::Replace, 2, None, Some("NEW")).unwrap(),
+                format!("a{newline}NEW")
+            );
+        }
+        assert_eq!(
+            apply_to_text("a\nb\n", EditOpArg::Insert, 2, None, Some("")).unwrap(),
+            "a\nb\n"
+        );
+    }
+
+    #[test]
+    fn editing_excluded_files_does_not_add_them_to_index() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir(temp.path().join("dist")).unwrap();
+        fs::write(temp.path().join(".gitignore"), "ignored.rs\n").unwrap();
+        for name in ["dist/generated.rs", "ignored.rs", ".hidden.rs"] {
+            fs::write(temp.path().join(name), "fn before() {}\n").unwrap();
+            super::apply(
+                temp.path(),
+                Utf8Path::new(name),
+                EditOpArg::Replace,
+                1,
+                None,
+                Some("fn after() {}\n"),
+                blake3::hash(b"fn before() {}\n").to_hex().as_ref(),
+            )
+            .unwrap();
+            let index = crate::snapshot::load_or_build(temp.path()).unwrap();
+            assert!(index.files.is_empty(), "excluded file indexed: {name}");
+            assert!(
+                crate::search::search_hits(&index, "after", 10)
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+    }
 
     #[test]
     fn replaces_lines() {

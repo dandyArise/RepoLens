@@ -414,6 +414,9 @@ fn format_lines(content: &[ReadLine], range: Option<&str>) -> Result<String> {
 fn parse_line_range(raw: &str) -> Result<(usize, usize)> {
     let Some((start, end)) = raw.split_once('-') else {
         let line = raw.parse::<usize>().context("invalid line number")?;
+        if line == 0 {
+            bail!("line must be >= 1");
+        }
         return Ok((line, line));
     };
     let start = start.parse::<usize>().context("invalid range start")?;
@@ -432,6 +435,7 @@ mod tests {
 
     #[test]
     fn parses_line_ranges() {
+        assert!(super::parse_line_range("0").is_err());
         assert_eq!(parse_line_range("2-4").unwrap(), (2, 4));
         assert_eq!(parse_line_range("3").unwrap(), (3, 3));
         assert!(parse_line_range("4-2").is_err());

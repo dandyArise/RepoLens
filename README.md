@@ -561,6 +561,7 @@ Safety rules:
 - reindexes immediately after write.
 
 Appending a line after an unterminated last line adds a line separator, preserving CRLF when present. Other editors do not participate in the RepoLens edit lock.
+Inserted or replacement content without a final newline is separated from any following source line. Editing an excluded file leaves it excluded from the index. Older index semantics are rebuilt automatically when loaded.
 
 ### `mcp`
 
