@@ -1,4 +1,6 @@
-# RepoLens v0.1.23
+# RepoLens v0.1.24
+
+This release includes all improvements since v0.1.22. The v0.1.23 tag did not produce a release because GitHub retired the macOS 14 runner; macOS ARM64 builds now use macOS 15.
 
 ## Automatic MCP index updates
 

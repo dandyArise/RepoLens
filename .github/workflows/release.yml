@@ -33,7 +33,7 @@ jobs:
             asset: repolens-darwin-x86_64
             archive: tar.gz
             binary: repolens
-          - os: macos-14
+          - os: macos-15
             asset: repolens-darwin-arm64
             archive: tar.gz
             binary: repolens
