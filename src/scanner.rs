@@ -20,6 +20,24 @@ const SKIP_DIRS: &[&str] = &[
 ];
 
 pub fn source_files(root: &Path, config: &Config) -> Result<Vec<PathBuf>> {
+    source_files_targeted(root, config, None)
+}
+
+/// Traverse only the target's ancestor chain, using exactly the full scanner's
+/// ignore, hidden, sensitive, symlink and size policies.
+pub fn is_source_file(root: &Path, path: &Path, config: &Config) -> Result<bool> {
+    Ok(
+        source_files_targeted(root, config, Some(path.to_path_buf()))?
+            .iter()
+            .any(|candidate| candidate == path),
+    )
+}
+
+fn source_files_targeted(
+    root: &Path,
+    config: &Config,
+    target: Option<PathBuf>,
+) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     let allow_sensitive = config.allow_sensitive;
     let filter_hidden = !config.include_hidden;
@@ -30,6 +48,12 @@ pub fn source_files(root: &Path, config: &Config) -> Result<Vec<PathBuf>> {
         .git_exclude(true)
         .require_git(false)
         .filter_entry(move |entry| {
+            if target
+                .as_ref()
+                .is_some_and(|path| !path.starts_with(entry.path()))
+            {
+                return false;
+            }
             let name = entry.file_name().to_string_lossy();
             !SKIP_DIRS.iter().any(|skip| name.eq_ignore_ascii_case(skip))
                 && (allow_sensitive || !security::is_sensitive_name(&name))
@@ -69,6 +93,56 @@ mod tests {
     use crate::config::Config;
 
     use super::{looks_binary, source_files};
+
+    #[test]
+    fn targeted_scan_matches_full_scan_policies_and_inherited_overrides() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("workspace");
+        fs::create_dir_all(root.join("nested")).unwrap();
+        fs::create_dir_all(root.join("target")).unwrap();
+        fs::create_dir_all(root.join(".hidden")).unwrap();
+        fs::create_dir_all(root.join("secrets")).unwrap();
+        fs::write(temp.path().join(".ignore"), "*.py\n").unwrap();
+        fs::write(root.join(".ignore"), "!/*.py\n").unwrap();
+        fs::write(root.join("nested/.ignore"), "!keep.py\n").unwrap();
+        fs::write(root.join(".gitignore"), "blocked.rs\n").unwrap();
+        let paths = [
+            "main.py",
+            "nested/no.py",
+            "nested/keep.py",
+            "blocked.rs",
+            "target/a.rs",
+            ".hidden/a.rs",
+            ".hidden.rs",
+            "secrets/a.rs",
+            ".env",
+            "large.rs",
+        ];
+        for path in paths {
+            fs::write(root.join(path), "token\n").unwrap();
+        }
+        fs::write(root.join("large.rs"), "x".repeat(128)).unwrap();
+        for include_hidden in [false, true] {
+            for allow_sensitive in [false, true] {
+                let config = Config {
+                    include_hidden,
+                    allow_sensitive,
+                    max_file_size: 64,
+                };
+                let full = source_files(&root, &config).unwrap();
+                assert!(full.contains(&root.join("main.py")));
+                assert!(full.contains(&root.join("nested/keep.py")));
+                for path in paths.into_iter().chain(["absent.rs"]) {
+                    let path = root.join(path);
+                    assert_eq!(
+                        super::is_source_file(&root, &path, &config).unwrap(),
+                        full.contains(&path),
+                        "{path:?}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn detects_binary_content() {

@@ -124,9 +124,7 @@ impl ProjectIndex {
     pub fn upsert_file(&mut self, path: &Utf8PathBuf) -> Result<()> {
         let config = Config::load(self.root.as_std_path())?;
         let full_path = self.root.join(path);
-        if !scanner::source_files(self.root.as_std_path(), &config)?
-            .contains(&full_path.as_std_path().to_path_buf())
-        {
+        if !scanner::is_source_file(self.root.as_std_path(), full_path.as_std_path(), &config)? {
             return self.remove_file(path);
         }
         self.update_file_contents(path)
@@ -151,8 +149,7 @@ impl ProjectIndex {
         let bytes =
             fs::read(&full_path).with_context(|| format!("failed to read {}", full_path))?;
         if scanner::looks_binary(&bytes) {
-            *self = Self::build(self.root.as_std_path())?;
-            return Ok(());
+            return self.remove_file(path);
         }
 
         let text = String::from_utf8_lossy(&bytes);

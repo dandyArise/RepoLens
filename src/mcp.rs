@@ -49,7 +49,9 @@ pub fn serve(root: Option<&Path>) -> Result<()> {
         None => ServerState::without_root()?,
     };
     let stdin = io::stdin();
-    let mut stdout = io::stdout().lock();
+    // JSON serialization emits many small writes, especially when escaping
+    // large text blocks. Batch them, but flush every complete RPC response.
+    let mut stdout = io::BufWriter::with_capacity(64 * 1024, io::stdout().lock());
 
     for line in stdin.lock().lines() {
         let line = line?;
@@ -76,6 +78,7 @@ struct ServerState {
     indexes: HashMap<String, ProjectIndex>,
     cache_order: VecDeque<String>,
     snapshot_stamps: HashMap<String, Vec<Option<(std::time::SystemTime, u64)>>>,
+    watchers: HashMap<String, watcher::LiveWatcher>,
 }
 
 impl ServerState {
@@ -98,6 +101,7 @@ impl ServerState {
             indexes: HashMap::new(),
             cache_order: VecDeque::new(),
             snapshot_stamps: HashMap::new(),
+            watchers: HashMap::new(),
         };
         state.refresh_allowed_roots();
         Ok(state)
@@ -116,7 +120,9 @@ impl ServerState {
         allowed_roots: impl IntoIterator<Item = Utf8PathBuf>,
         codex_config_path: Option<PathBuf>,
     ) -> Result<Self> {
-        let index = snapshot::load_or_build(root)?;
+        let root = canonical_utf8(root)?;
+        let live_watcher = watcher::LiveWatcher::new(&root);
+        let index = snapshot::load_or_build(root.as_std_path())?;
         let active_root = index.root.clone();
         let mut allowed = HashMap::new();
         add_allowed_root(&mut allowed, active_root.clone());
@@ -128,7 +134,8 @@ impl ServerState {
         let key = root_key(&active_root);
         indexes.insert(key.clone(), index);
         let mut cache_order = VecDeque::new();
-        cache_order.push_back(key);
+        cache_order.push_back(key.clone());
+        let watchers = HashMap::from([(key, live_watcher)]);
 
         let mut state = Self {
             active_root: Some(active_root),
@@ -138,6 +145,7 @@ impl ServerState {
             indexes,
             cache_order,
             snapshot_stamps: HashMap::new(),
+            watchers,
         };
         state.refresh_allowed_roots();
         Ok(state)
@@ -164,8 +172,10 @@ impl ServerState {
         let root = self.allowed_root(root)?;
         let key = root_key(&root);
         if !self.indexes.contains_key(&key) {
+            let live_watcher = watcher::LiveWatcher::new(&root);
             let index = snapshot::load_or_build(root.as_std_path())?;
             self.indexes.insert(key.clone(), index);
+            self.watchers.insert(key.clone(), live_watcher);
         }
         self.active_root = Some(root);
         self.touch_cache_key(key);
@@ -189,6 +199,8 @@ impl ServerState {
         self.indexes
             .retain(|key, _| self.allowed_roots.contains_key(key));
         self.snapshot_stamps
+            .retain(|key, _| self.allowed_roots.contains_key(key));
+        self.watchers
             .retain(|key, _| self.allowed_roots.contains_key(key));
         self.cache_order
             .retain(|key| self.allowed_roots.contains_key(key));
@@ -217,6 +229,14 @@ impl ServerState {
             let index = snapshot::load_or_build(active_root.as_std_path())?;
             self.indexes.insert(key.clone(), index);
             self.snapshot_stamps.insert(key.clone(), stamp);
+            // A replacement snapshot can itself predate source edits.
+            self.watchers
+                .insert(key.clone(), watcher::LiveWatcher::new(active_root));
+        }
+        if let (Some(watcher), Some(index)) =
+            (self.watchers.get_mut(&key), self.indexes.get_mut(&key))
+        {
+            watcher.refresh(index)?;
         }
         self.indexes
             .get(&key)
@@ -255,6 +275,7 @@ impl ServerState {
             }
             self.indexes.remove(&candidate);
             self.snapshot_stamps.remove(&candidate);
+            self.watchers.remove(&candidate);
         }
     }
 }
@@ -558,11 +579,21 @@ fn call_tool(state: &mut ServerState, params: Value) -> Result<Value> {
         .ok_or_else(|| anyhow!("missing tool name"))?;
     let args = params.get("arguments").cloned().unwrap_or(Value::Null);
 
-    match call_tool_raw(state, name, args) {
-        Ok(content) => Ok(json!({
+    // Avoid constructing a Value object (and several allocations) for every
+    // search hit just to serialize that object immediately afterwards.
+    let content = if name == "repolens_search" {
+        with_root_rollback(state, |state| {
+            Ok(serde_json::to_string(&search_tool(state, &args)?)?)
+        })
+    } else {
+        call_tool_raw(state, name, args)
+            .and_then(|content| Ok(serde_json::to_string_pretty(&content)?))
+    };
+    match content {
+        Ok(text) => Ok(json!({
             "content": [{
                 "type": "text",
-                "text": serde_json::to_string_pretty(&content)?
+                "text": text
             }]
         })),
         Err(error) => Ok(json!({
@@ -582,13 +613,27 @@ fn is_notification(line: &str) -> bool {
 }
 
 fn call_tool_raw(state: &mut ServerState, name: &str, args: Value) -> Result<Value> {
+    with_root_rollback(state, |state| call_tool_raw_inner(state, name, args))
+}
+
+fn with_root_rollback<T>(
+    state: &mut ServerState,
+    call: impl FnOnce(&mut ServerState) -> Result<T>,
+) -> Result<T> {
     let previous_active = state.active_root.clone();
-    let result = call_tool_raw_inner(state, name, args);
+    let result = call(state);
     if result.is_err() {
         state.active_root =
             previous_active.filter(|root| state.allowed_roots.contains_key(&root_key(root)));
     }
     result
+}
+
+fn search_tool(state: &mut ServerState, args: &Value) -> Result<Vec<search::SearchHit>> {
+    let index = state.index_for_args(args)?;
+    let query = get_str(args, "query")?;
+    let limit = get_usize(args, "limit")?.unwrap_or(20);
+    search::search_hits_parallel(index, query, limit)
 }
 
 fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Result<Value> {
@@ -657,10 +702,7 @@ fn call_tool_raw_inner(state: &mut ServerState, name: &str, args: Value) -> Resu
             }).collect::<Vec<_>>())
         }
         "repolens_search" => {
-            let index = state.index_for_args(&args)?;
-            let query = get_str(&args, "query")?;
-            let limit = get_usize(&args, "limit")?.unwrap_or(20);
-            json!(search::search_hits(index, query, limit)?)
+            json!(search_tool(state, &args)?)
         }
         "repolens_word" => {
             let index = state.index_for_args(&args)?;
@@ -821,6 +863,51 @@ fn parse_edit_op(raw: &str) -> Result<EditOpArg> {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn search_content_is_compact_json_with_unchanged_text() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.rs"), "  torch \"é\" \\ path  \n").unwrap();
+        let mut state = super::ServerState::new(dir.path()).unwrap();
+        let response = super::call_tool(
+            &mut state,
+            serde_json::json!({
+                "name": "repolens_search", "arguments": {"query": "torch", "limit": 10000}
+            }),
+        )
+        .unwrap();
+        let text = response["content"][0]["text"].as_str().unwrap();
+        assert!(!text.contains('\n'));
+        let hits: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(hits[0]["path"], "a.rs");
+        assert_eq!(hits[0]["line"], 1);
+        assert_eq!(hits[0]["text"], "torch \"é\" \\ path");
+        let raw = super::call_tool_raw(
+            &mut state,
+            "repolens_search",
+            serde_json::json!({"query":"torch", "limit":10000}),
+        )
+        .unwrap();
+        assert_eq!(hits, raw);
+    }
+
+    #[test]
+    fn direct_search_failure_restores_active_workspace() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let second_root = camino::Utf8PathBuf::from_path_buf(second.path().to_owned()).unwrap();
+        let mut state =
+            super::ServerState::with_allowed_roots(first.path(), [second_root.clone()]).unwrap();
+        let original = state.active_root.clone();
+        let response = super::call_tool(
+            &mut state,
+            serde_json::json!({
+                "name":"repolens_search", "arguments":{"workspaceRoot":second_root, "query":42}
+            }),
+        )
+        .unwrap();
+        assert_eq!(response["isError"], true);
+        assert_eq!(state.active_root, original);
+    }
+    #[test]
     fn live_mcp_reloads_hidden_filter_without_restarting() {
         let temp = tempfile::tempdir().unwrap();
         let config = temp.path().join(".repolensrc.toml");
@@ -866,6 +953,88 @@ mod tests {
     use serde_json::json;
 
     use super::{MAX_CACHED_ROOTS, ServerState, handle_line, is_notification, tools};
+
+    fn await_search(state: &mut ServerState, query: &str, expected: usize) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let hits = super::search_tool(state, &json!({"query": query})).unwrap();
+            if hits.len() == expected {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "{query}: expected {expected}, got {}",
+                hits.len()
+            );
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+    }
+
+    #[test]
+    fn live_mcp_tracks_modify_create_rename_remove_and_ignore_rules() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        fs::write(root.join("a.py"), "old_unique_token\n").unwrap();
+        let mut state = ServerState::with_allowed_roots(root, []).unwrap();
+        await_search(&mut state, "old_unique_token", 1);
+        fs::write(root.join("a.py"), "new_unique_token\n").unwrap();
+        await_search(&mut state, "new_unique_token", 1);
+        await_search(&mut state, "old_unique_token", 0);
+        fs::create_dir(root.join("nested")).unwrap();
+        fs::write(root.join("nested/b.py"), "created_unique_token\n").unwrap();
+        await_search(&mut state, "created_unique_token", 1);
+        fs::rename(root.join("nested"), root.join("renamed")).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let hits =
+                super::search_tool(&mut state, &json!({"query":"created_unique_token"})).unwrap();
+            if hits.len() == 1 && hits[0].path.replace('\\', "/") == "renamed/b.py" {
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        fs::write(root.join(".ignore"), "renamed/\n").unwrap();
+        await_search(&mut state, "created_unique_token", 0);
+        fs::write(root.join(".ignore"), "").unwrap();
+        await_search(&mut state, "created_unique_token", 1);
+        fs::remove_file(root.join("a.py")).unwrap();
+        await_search(&mut state, "new_unique_token", 0);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while state
+            .index_for_args(&json!({}))
+            .unwrap()
+            .files
+            .iter()
+            .any(|f| f.path == "a.py")
+        {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+    }
+
+    #[test]
+    fn live_mcp_reconciles_offline_edits_and_watches_switched_roots() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        fs::write(first.path().join("a.py"), "before_offline\n").unwrap();
+        crate::snapshot::save(&crate::index::ProjectIndex::build(first.path()).unwrap()).unwrap();
+        fs::write(first.path().join("a.py"), "after_offline_longer\n").unwrap();
+        fs::write(second.path().join("b.py"), "second_before\n").unwrap();
+        let mut state = ServerState::with_allowed_roots(
+            first.path(),
+            [crate::pathing::canonical_utf8(second.path()).unwrap()],
+        )
+        .unwrap();
+        await_search(&mut state, "after_offline_longer", 1);
+        state.switch_root(second.path()).unwrap();
+        await_search(&mut state, "second_before", 1);
+        fs::write(second.path().join("b.py"), "second_after\n").unwrap();
+        await_search(&mut state, "second_after", 1);
+        fs::write(first.path().join("new.py"), "inactive_root_token\n").unwrap();
+        state.switch_root(first.path()).unwrap();
+        await_search(&mut state, "inactive_root_token", 1);
+    }
 
     #[test]
     fn rejects_invalid_optional_strings_without_switching_or_editing() {

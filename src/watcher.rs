@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -43,6 +44,226 @@ pub struct ChangeRecord {
 }
 
 type FileSignature = BTreeMap<String, (u64, u64)>;
+
+#[derive(Default)]
+struct PendingChanges {
+    reconcile: bool,
+    rebuild: bool,
+    fallback: bool,
+    paths: BTreeSet<std::path::PathBuf>,
+}
+
+/// One bounded event accumulator per cached MCP workspace. Index mutation stays
+/// on the request thread; callbacks never touch snapshots or write to stdout.
+pub struct LiveWatcher {
+    _watcher: Option<RecommendedWatcher>,
+    pending: Arc<Mutex<PendingChanges>>,
+    last_check: std::time::Instant,
+    last_rules_check: std::time::Instant,
+    rule_stamps: Vec<Option<(SystemTime, u64)>>,
+    rule_paths: Vec<std::path::PathBuf>,
+}
+
+impl LiveWatcher {
+    pub fn new(root: &Utf8Path) -> Self {
+        let pending = Arc::new(Mutex::new(PendingChanges {
+            reconcile: true, // Also catch edits made while the server was stopped.
+            ..Default::default()
+        }));
+        let events = pending.clone();
+        let watched_root = root.to_owned();
+        let watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
+            let mut pending = events.lock().unwrap_or_else(|e| e.into_inner());
+            match result {
+                Ok(event) if !matches!(event.kind, notify::EventKind::Access(_)) => {
+                    if event.need_rescan() {
+                        pending.rebuild = true;
+                    }
+                    for path in event.paths {
+                        if is_ignored_path(&watched_root, &path)
+                            && path != watched_root.join(".git/info/exclude").as_std_path()
+                        {
+                            continue;
+                        }
+                        let rule = matches!(
+                            path.file_name().and_then(|s| s.to_str()),
+                            Some(".gitignore" | ".ignore" | ".repolensrc.toml")
+                        ) || path.ends_with(".git/info/exclude");
+                        if rule {
+                            pending.rebuild = true;
+                        } else if !is_ignored_path(&watched_root, &path) {
+                            if pending.paths.len() < 4096 {
+                                pending.paths.insert(path);
+                            } else {
+                                pending.rebuild = true;
+                            }
+                        }
+                    }
+                }
+                Err(_) => {
+                    pending.rebuild = true;
+                    pending.fallback = true;
+                }
+                _ => {}
+            }
+        })
+        .and_then(|mut watcher| {
+            watcher.watch(root.as_std_path(), RecursiveMode::Recursive)?;
+            Ok(watcher)
+        });
+        let watcher = match watcher {
+            Ok(watcher) => Some(watcher),
+            Err(error) => {
+                eprintln!("MCP watch failed for {root}: {error}; using 2s polling");
+                None
+            }
+        };
+        // Inherited ignore files live outside the recursively watched workspace.
+        let rule_paths = root
+            .ancestors()
+            .flat_map(|dir| {
+                [
+                    dir.join(".ignore").into_std_path_buf(),
+                    dir.join(".gitignore").into_std_path_buf(),
+                    dir.join(".git/info/exclude").into_std_path_buf(),
+                ]
+            })
+            .collect::<Vec<_>>();
+        let rule_stamps = Self::rule_stamps(&rule_paths);
+        Self {
+            _watcher: watcher,
+            pending,
+            last_check: std::time::Instant::now(),
+            last_rules_check: std::time::Instant::now(),
+            rule_stamps,
+            rule_paths,
+        }
+    }
+
+    fn rule_stamps(paths: &[std::path::PathBuf]) -> Vec<Option<(SystemTime, u64)>> {
+        paths
+            .iter()
+            .map(|path| {
+                fs::metadata(path)
+                    .ok()
+                    .and_then(|m| m.modified().ok().map(|time| (time, m.len())))
+            })
+            .collect()
+    }
+
+    pub fn refresh(&mut self, index: &mut ProjectIndex) -> Result<()> {
+        let mut changes = {
+            let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+            std::mem::take(&mut *pending)
+        };
+        if changes.fallback {
+            eprintln!("MCP watch lost events for {}; using 2s polling", index.root);
+            self._watcher = None;
+        }
+        if self._watcher.is_none() && self.last_check.elapsed() >= Duration::from_secs(2) {
+            changes.reconcile = true;
+        }
+        if self.last_rules_check.elapsed() >= Duration::from_secs(2) {
+            let stamps = Self::rule_stamps(&self.rule_paths);
+            changes.rebuild |= stamps != self.rule_stamps;
+            self.rule_stamps = stamps;
+            self.last_rules_check = std::time::Instant::now();
+        }
+        if !changes.reconcile && !changes.rebuild && changes.paths.is_empty() {
+            return Ok(());
+        }
+        self.last_check = std::time::Instant::now();
+        let result = self.apply(index, &changes);
+        if result.is_err() {
+            // Never lose a failed batch (e.g. an editor temporarily locks a file).
+            self.pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .rebuild = true;
+        }
+        result
+    }
+
+    fn apply(&self, index: &mut ProjectIndex, changes: &PendingChanges) -> Result<()> {
+        if changes.rebuild {
+            *index = ProjectIndex::build(index.root.as_std_path())?;
+            return Ok(());
+        }
+        // Ordinary file notifications need neither a repository signature scan
+        // nor reads of unrelated binary assets. Directory/ambiguous events,
+        // startup and polling retain the conservative reconciliation below.
+        if !changes.reconcile
+            && changes.paths.len() <= 32
+            && changes.paths.iter().all(|path| {
+                relative_utf8(&index.root, path).is_some_and(|relative| {
+                    (path.is_file() || index.file_by_path(&relative).is_some())
+                        && !index
+                            .files
+                            .iter()
+                            .any(|file| file.path != relative && file.path.starts_with(&relative))
+                })
+            })
+        {
+            for path in &changes.paths {
+                let relative = relative_utf8(&index.root, path).expect("validated relative path");
+                if path.is_file() {
+                    index.upsert_file(&relative)?;
+                } else {
+                    index.remove_file(&relative)?;
+                }
+            }
+            return Ok(());
+        }
+        let signature = file_signature(&index.root)?;
+        let indexed = index
+            .files
+            .iter()
+            .map(|f| (f.path.as_str(), (f.bytes, f.mtime_ms)))
+            .collect::<BTreeMap<_, _>>();
+        let removed = index
+            .files
+            .iter()
+            .filter(|file| !signature.contains_key(file.path.as_str()))
+            .map(|file| file.path.clone())
+            .collect::<Vec<_>>();
+        let changed = signature
+            .iter()
+            .filter(|(path, signature)| {
+                let relative = Utf8PathBuf::from(path.as_str());
+                changes
+                    .paths
+                    .contains(index.root.join(&relative).as_std_path())
+                    || indexed.get(path.as_str()) != Some(*signature)
+            })
+            .map(|(path, _)| Utf8PathBuf::from(path))
+            .collect::<Vec<_>>();
+        // The scanner also lists small binary assets, but the index omits them.
+        // Do not mistake those existing assets for newly added source files on
+        // every event (which would repeatedly rebuild the entire repository).
+        let mut source_changes = Vec::new();
+        for path in changed {
+            if !indexed.contains_key(path.as_str()) {
+                let bytes = fs::read(index.root.join(&path))?;
+                if scanner::looks_binary(&bytes) {
+                    continue;
+                }
+            }
+            source_changes.push(path);
+        }
+        let changed = source_changes;
+        if removed.len() + changed.len() > 32 {
+            *index = ProjectIndex::build(index.root.as_std_path())?;
+        } else {
+            for path in removed {
+                index.remove_file(&path)?;
+            }
+            for path in changed {
+                index.upsert_file(&path)?;
+            }
+        }
+        Ok(())
+    }
+}
 
 pub fn watch(root: &Path, poll: bool, interval_ms: u64) -> Result<()> {
     let root = canonical_utf8(root)?;
@@ -323,6 +544,150 @@ mod tests {
     use notify::{Event, EventKind};
 
     use super::{diff_signatures, read_state, record_event, reindex_poll_changes};
+
+    #[test]
+    fn directory_replaced_by_file_removes_indexed_descendants() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("replaced.py");
+        std::fs::create_dir(&path).unwrap();
+        std::fs::write(path.join("child.py"), "old_child_token\n").unwrap();
+        let mut index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        let watcher = super::LiveWatcher::new(&index.root);
+        std::fs::remove_file(path.join("child.py")).unwrap();
+        std::fs::remove_dir(&path).unwrap();
+        std::fs::write(&path, "new_file_token\n").unwrap();
+        watcher
+            .apply(
+                &mut index,
+                &super::PendingChanges {
+                    paths: [path].into_iter().collect(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(index.files.len(), 1);
+        assert_eq!(index.files[0].path, "replaced.py");
+        assert_eq!(
+            crate::search::search_hits(&index, "new_file_token", 10)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn targeted_file_events_preserve_exclusions_and_remove_binary_or_oversized_files() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join(".ignore"), "ignored.py\n").unwrap();
+        std::fs::write(
+            temp.path().join(".repolensrc.toml"),
+            "max_file_size = \"128\"\n",
+        )
+        .unwrap();
+        let mut index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        let watcher = super::LiveWatcher::new(&index.root);
+        for name in ["main.py", "ignored.py", ".hidden.py", ".env"] {
+            let path = temp.path().join(name);
+            std::fs::write(&path, "def unique_live_symbol(): pass\n").unwrap();
+            watcher
+                .apply(
+                    &mut index,
+                    &super::PendingChanges {
+                        paths: [path].into_iter().collect(),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+        }
+        assert_eq!(index.files.len(), 1);
+        assert_eq!(index.files[0].path, "main.py");
+        let path = temp.path().join("main.py");
+        for content in [
+            vec![b'x'; 256],
+            b"binary\0content".to_vec(),
+            b"def restored_symbol(): pass\n".to_vec(),
+        ] {
+            std::fs::write(&path, content).unwrap();
+            watcher
+                .apply(
+                    &mut index,
+                    &super::PendingChanges {
+                        paths: [path.clone()].into_iter().collect(),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            let full = crate::index::ProjectIndex::build(temp.path()).unwrap();
+            assert_eq!(
+                index.files.iter().map(|f| &f.path).collect::<Vec<_>>(),
+                full.files.iter().map(|f| &f.path).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                serde_json::to_value(crate::search::search_hits(&index, "symbol", 100).unwrap())
+                    .unwrap(),
+                serde_json::to_value(crate::search::search_hits(&full, "symbol", 100).unwrap())
+                    .unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn live_polling_and_inherited_ignore_changes_refresh_index() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join("workspace");
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(dir.join("a.py"), "before\n").unwrap();
+        let mut index = crate::index::ProjectIndex::build(&dir).unwrap();
+        let mut watcher = super::LiveWatcher::new(&index.root);
+        watcher.refresh(&mut index).unwrap();
+        watcher._watcher = None;
+        std::fs::write(dir.join("new.py"), "polling_unique_token\n").unwrap();
+        watcher.last_check -= std::time::Duration::from_secs(3);
+        watcher.refresh(&mut index).unwrap();
+        assert_eq!(
+            crate::search::search_hits(&index, "polling_unique_token", 10)
+                .unwrap()
+                .len(),
+            1
+        );
+        std::fs::write(temp.path().join(".ignore"), "new.py\n").unwrap();
+        watcher.last_rules_check -= std::time::Duration::from_secs(3);
+        watcher.refresh(&mut index).unwrap();
+        assert_eq!(
+            crate::search::search_hits(&index, "polling_unique_token", 10)
+                .unwrap()
+                .len(),
+            0
+        );
+        std::fs::remove_file(temp.path().join(".ignore")).unwrap();
+        watcher.last_rules_check -= std::time::Duration::from_secs(3);
+        watcher.refresh(&mut index).unwrap();
+        assert_eq!(
+            crate::search::search_hits(&index, "polling_unique_token", 10)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn live_refresh_retries_failed_batches() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("a.py"), "before\n").unwrap();
+        let mut index = crate::index::ProjectIndex::build(temp.path()).unwrap();
+        let mut watcher = super::LiveWatcher::new(&index.root);
+        std::fs::write(temp.path().join(".repolensrc.toml"), "invalid = [").unwrap();
+        assert!(watcher.refresh(&mut index).is_err());
+        std::fs::remove_file(temp.path().join(".repolensrc.toml")).unwrap();
+        std::fs::write(temp.path().join("a.py"), "recovered_unique_token\n").unwrap();
+        watcher.refresh(&mut index).unwrap();
+        assert_eq!(
+            crate::search::search_hits(&index, "recovered_unique_token", 10)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
 
     #[test]
     fn records_watch_sequence() {

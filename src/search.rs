@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 
 use anyhow::Result;
+use rayon::prelude::*;
 use serde::Serialize;
 
 use crate::index::{FileId, ProjectIndex};
@@ -23,40 +24,110 @@ pub fn search(index: &ProjectIndex, query: &str, limit: usize) -> Result<()> {
 }
 
 pub fn search_hits(index: &ProjectIndex, query: &str, limit: usize) -> Result<Vec<SearchHit>> {
+    search_hits_impl(index, query, limit, false)
+}
+
+// Persistent servers amortize worker-pool startup over requests. One-shot CLI
+// searches stay sequential rather than paying that startup cost every time.
+pub fn search_hits_parallel(
+    index: &ProjectIndex,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<SearchHit>> {
+    search_hits_impl(index, query, limit, true)
+}
+
+fn search_hits_impl(
+    index: &ProjectIndex,
+    query: &str,
+    limit: usize,
+    parallel: bool,
+) -> Result<Vec<SearchHit>> {
     let config = Config::load(index.root.as_std_path())?;
     let candidates = candidate_files(index, query);
     let needle = query.to_lowercase();
     let mut hits = Vec::new();
-
+    // Keep short interactive searches lazy. Large result sets can scan files
+    // independently, then merge in candidate order to preserve global limits
+    // and which errors are observable before that limit is reached.
+    let parallel_work = parallel
+        && limit >= 1024
+        && candidates.len() >= 8
+        && candidates
+            .iter()
+            .filter_map(|&id| index.file_by_id(id))
+            .map(|file| file.bytes)
+            .sum::<u64>()
+            >= 256 * 1024;
+    if parallel_work {
+        let batches: Vec<_> = candidates
+            .par_iter()
+            .map(|&id| search_file(index, id, &config, &needle, limit))
+            .collect();
+        for batch in batches {
+            if hits.len() >= limit {
+                break;
+            }
+            hits.extend(batch?.into_iter().take(limit - hits.len()));
+        }
+        return Ok(hits);
+    }
     for id in candidates {
         if hits.len() >= limit {
             break;
         }
-        let Some(file) = index.file_by_id(id) else {
-            continue;
-        };
-        let full_path = safe_join(&index.root, &file.path)?;
-        if !config.allow_sensitive && security::is_sensitive_path(full_path.as_std_path()) {
-            continue;
-        }
-        let Ok(content) = fs::read_to_string(&full_path) else {
-            continue;
-        };
+        hits.extend(search_file(
+            index,
+            id,
+            &config,
+            &needle,
+            limit - hits.len(),
+        )?);
+    }
+    Ok(hits)
+}
 
-        for (line_no, line) in content.lines().enumerate() {
-            if line.to_lowercase().contains(&needle) {
-                hits.push(SearchHit {
-                    path: file.path.to_string(),
-                    line: line_no + 1,
-                    text: line.trim().to_string(),
-                });
-                if hits.len() >= limit {
-                    break;
-                }
+fn search_file(
+    index: &ProjectIndex,
+    id: FileId,
+    config: &Config,
+    needle: &str,
+    limit: usize,
+) -> Result<Vec<SearchHit>> {
+    let mut hits = Vec::new();
+    let Some(file) = index.file_by_id(id) else {
+        return Ok(hits);
+    };
+    let full_path = safe_join(&index.root, &file.path)?;
+    if !config.allow_sensitive && security::is_sensitive_path(full_path.as_std_path()) {
+        return Ok(hits);
+    }
+    let Ok(content) = fs::read_to_string(&full_path) else {
+        return Ok(hits);
+    };
+    let mut scratch = String::new();
+    for (line_no, line) in content.lines().enumerate() {
+        let matches = if line.is_ascii() {
+            scratch.clear();
+            scratch.push_str(line);
+            scratch.make_ascii_lowercase();
+            scratch.contains(needle)
+        } else {
+            // Preserve Rust's Unicode lowercase semantics, including
+            // context-sensitive mappings and length-changing mappings.
+            line.to_lowercase().contains(needle)
+        };
+        if matches {
+            hits.push(SearchHit {
+                path: file.path.to_string(),
+                line: line_no + 1,
+                text: line.trim().to_string(),
+            });
+            if hits.len() >= limit {
+                break;
             }
         }
     }
-
     Ok(hits)
 }
 
@@ -148,6 +219,47 @@ mod tests {
     use crate::index::{FileEntry, ProjectIndex};
 
     use super::{extract_trigrams, extract_words};
+
+    #[test]
+    fn optimized_search_matches_serial_reference_with_limits_and_unicode() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = "  ToRcH DEF sample  \r\n".repeat(1200)
+            + "TORCH ΟΣ İ K é 🦀\nfinal torch without newline";
+        for i in 0..12 {
+            std::fs::write(dir.path().join(format!("file_{i:02}.rs")), &content).unwrap();
+        }
+        let index = ProjectIndex::build(dir.path()).unwrap();
+        // The search must still read current source, not stale cached content.
+        std::fs::write(index.root.join(&index.files[0].path), "edited torch\n").unwrap();
+        std::fs::remove_file(index.root.join(&index.files[1].path)).unwrap();
+        for query in ["torch", "def ", "ΟΣ", "i\u{307}", "k", "", "absent"] {
+            for limit in [0, 1, 1023, 1024, usize::MAX] {
+                let mut expected = Vec::new();
+                for id in super::candidate_files(&index, query) {
+                    let file = index.file_by_id(id).unwrap();
+                    let Ok(text) = std::fs::read_to_string(index.root.join(&file.path)) else {
+                        continue;
+                    };
+                    for (line, text) in text.lines().enumerate() {
+                        if text.to_lowercase().contains(&query.to_lowercase()) {
+                            expected.push((
+                                file.path.to_string(),
+                                line + 1,
+                                text.trim().to_owned(),
+                            ));
+                        }
+                    }
+                }
+                expected.truncate(limit);
+                let actual: Vec<_> = super::search_hits_parallel(&index, query, limit)
+                    .unwrap()
+                    .into_iter()
+                    .map(|hit| (hit.path, hit.line, hit.text))
+                    .collect();
+                assert_eq!(actual, expected, "query={query:?}, limit={limit}");
+            }
+        }
+    }
 
     #[test]
     fn extracts_identifier_words() {

@@ -21,6 +21,8 @@ RepoLens scans a repository, builds compact local indexes, and exposes code navi
 - 🧭 Symbols, search, outlines, deps, reverse deps, and guarded reads.
 - ✍️ Safe edit tool with hash guard, atomic write, and immediate reindex.
 - 👀 Watch mode with incremental updates and change tracking.
+- Isolated MCP file events update only the affected files, checking eligibility through a pruned traversal with the same ignore and security rules as a full scan. Startup, polling, directory events and ignore-rule changes retain full reconciliation.
+- MCP workspaces automatically watch source changes: queued edits are applied before the next tool call, including creation, deletion, renames and ignore-rule changes. Startup reconciles files changed while the server was stopped. Unchanged requests reuse the in-memory index; MCP updates do not rewrite snapshots. Watchers are released when a workspace leaves the cache. If native watching fails, MCP falls back to a scan on requests at most every two seconds. Inherited ignore-file changes are checked every two seconds on requests. Filesystem notifications are asynchronous: a request issued immediately after a write may precede its notification; subsequent calls apply the queued change without a manual `index` command.
 - 🧰 Auto-config for Codex, Claude Desktop, and Cursor.
 - 🔐 Sensitive files are blocked by default.
 - 🌍 Release binaries for Windows, Linux, and macOS.
@@ -508,7 +510,8 @@ Currently extracts:
 
 ### `bench`
 
-Measures index/search/symbol timings and compares search with `rg` if available.
+Measures index/search/symbol timings and compares three modes: RepoLens CLI,
+a persistent RepoLens MCP server, and `rg` CLI.
 
 ```powershell
 repolens bench . --query ProjectIndex --symbol ProjectIndex --limit 20
@@ -516,6 +519,62 @@ repolens bench . --query ProjectIndex --symbol ProjectIndex --json
 ```
 
 The report includes build/save/load timings and JSON/binary snapshot sizes.
+
+`search_ms` is an internal call with an already loaded index and the requested
+global `--limit`; it must not be compared with a process execution time.
+`cli_comparison` (the retained JSON field name) now measures all three modes,
+capturing their complete responses. All search every matching line (no limit),
+on exactly the indexed files, using
+literal case-insensitive search. `--limit` still applies to the separate internal
+search and symbol measurements. Index construction/save are setup costs reported
+separately; the RepoLens CLI time includes snapshot loading.
+
+One warmup round is discarded, followed by seven rounds with rotating mode
+order. The same MCP child process remains alive throughout all eight rounds,
+retaining its index. `mcp_startup_ms` reports launch and initialization separately;
+`mcp_pid` identifies that process. It is terminated and reaped on success or error.
+MCP requests use JSON-RPC over stdio, with a 30-second response timeout.
+
+The text report shows equality status and a table of median, mean, minimum and
+maximum latency. JSON retains the raw `repolens_cli_ms` and `rg_cli_ms` arrays,
+adds `repolens_mcp_ms`, and provides a `*_summary` object for each mode.
+`verified_rounds` counts successful comparisons including the discarded warmup.
+The query and debug/release build profile are included. Use a release build for
+performance comparisons, for example:
+
+```powershell
+cargo build --release
+.\target\release\repolens.exe bench . --query ProjectIndex --json
+```
+
+All durations retain fractional milliseconds. These are warm-cache measurements,
+not cold-start or index-amortization claims. CLI timings include process startup
+and complete stdout capture. MCP timing covers request write/flush through
+complete response capture; client-side parsing and equality checks are excluded.
+Native output formatting is included: CLI text versus MCP JSON. This compares
+real usage modes, not isolated search engines. No speed ratio is asserted.
+The comparison is valid only when `comparable` is true: normalized paths, line
+numbers and line content must agree across all three modes on every pass.
+Corpus and snapshot fingerprints must also remain unchanged before/after the
+measurement. Any failure clears all timing samples and summaries; the report
+retains an explicit reason and any completed verification count. Unicode case-folding can
+differ between engines and is deliberately detected rather than assumed equal.
+Missing `rg`, command failures, multiline queries and
+empty corpora produce an explicit reason, not a successful measurement. Paths
+containing colons or newlines are rejected as ambiguous in CLI text output.
+The indexed paths are written to a temporary gitignore-format whitelist passed
+with `rg --ignore-file`. This keeps command length independent of the file count,
+including on Windows. Paths are escaped literally; only indexed files and their
+parent directories are admitted. `rg --files --null` verifies the exact selected
+file list before and after measurement, outside the timers. The whitelist is
+removed on success or error. Each sample still uses one rg process, with directory
+traversal and whitelist parsing included in its time; no batching is used.
+`rg --no-config --no-ignore --hidden` prevents user configuration and repository
+ignore rules from changing that whitelist. Native filtering differences (for
+example symlinks not followed) cause an explicit corpus mismatch, not a comparison
+over different files. These rg timings include traversal, unlike earlier versions
+that supplied individual file arguments.
+The former ambiguous `rg_ms` JSON field is replaced by `cli_comparison`.
 
 ### `gain`
 
@@ -681,6 +740,19 @@ repolens disable --target all
 Existing unrelated MCP servers are kept.
 
 ## MCP Tools 🤖
+
+Large `repolens_search` requests (limit at least 1024, at least 8 candidate
+files totaling at least 256 KiB according to index metadata) scan files in parallel
+using the persistent process's Rayon pool. Results
+are merged in the original candidate order before applying the global limit.
+Small searches and CLI searches remain sequential. Source files are read on each
+request; no result/content cache is introduced. Search responses use compact JSON
+inside their MCP text block, with unchanged fields and Unicode matching semantics.
+Direct search calls serialize typed hits without an intermediate JSON object tree;
+bundle calls retain their structured result. Both share search validation and
+restore the previous active workspace on errors.
+The stdio server buffers serialization writes in 64 KiB chunks and flushes after
+each complete response, reducing small pipe writes without delaying responses.
 
 Implemented tools:
 
